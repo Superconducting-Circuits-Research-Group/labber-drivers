@@ -69,7 +69,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         if time_lapsed > 300:
             raise RuntimeWarning('The last record in %s might be '
                                  'outdated (the record timestamp is %s.)'
-                                 % (full_filename, str_record_time))
+                                 % (full_filename, str_time))
         return line
 
     def _parseSimpleRecord(self, line):
