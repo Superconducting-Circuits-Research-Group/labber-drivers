@@ -45,7 +45,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Perform the Get Value instrument operation."""
         # only implemented for traces
         if quant.name in ('Channel A - Averaged Data',
-                          'Channel B - Averaged Data'):
+                          'Channel B - Averaged Data',
+                          'Channel A - Flattened Data',
+                          'Channel B - Flattened Data'):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 return self.getSignalHardwareLoop(quant, options)
@@ -253,6 +255,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
+        bGetAllChA = bool(self.getValue('Channel A - Keep All Traces'))
+        bGetAllChB = bool(self.getValue('Channel B - Keep All Traces'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
         maxBufferSizeMB = int(self.getValue('Max buffer size'))
@@ -266,13 +270,16 @@ class Driver(InstrumentDriver.InstrumentWorker):
             nPostSize, nRecord,
             bConfig=False, bArm=bArm, bMeasure=True,
             funcStop=self.isStopped,
-            maxBuffers=maxBuffers, maxBufferSizeMB=maxBufferSizeMB)
+            maxBuffers=maxBuffers, maxBufferSizeMB=maxBufferSizeMB,
+            bGetAllTraces=(bGetAllChA | bGetAllChB))
 
     def getTracesSinglePort(self):
         """Resample the data."""
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
+        bGetAllChA = bool(self.getValue('Channel A - Keep All Traces'))
+        bGetAllChB = bool(self.getValue('Channel B - Keep All Traces'))
         nPreSize = int(self.getValue('Pre-trigger samples'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
@@ -283,9 +290,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
         if model == '9870':
             pAlgn = 64
             rAlgn = 256
-            nPreAlgn = pAlgn * (nPreSize + pAlgn - 1) // pAlgn
-            nPostAlgn = pAlgn * (nPostSize + pAlgn - 1) // pAlgn
-            nTotal = rAlgn * (nPreAlgn + nPostAlgn + rAlgn - 1) // rAlgn
+            nPreAlgn = pAlgn * ((nPreSize + pAlgn - 1) // pAlgn)
+            nPostAlgn = pAlgn * ((nPostSize + pAlgn - 1) // pAlgn)
+            nTotal = rAlgn * ((nPreAlgn + nPostAlgn + rAlgn - 1) // rAlgn)
             nPostAlgn = nTotal - nPreAlgn
             start = nPreAlgn - nPreSize
             end = start + nPreSize + nPostSize
@@ -312,11 +319,17 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         # read data for channels in use
         if bGetChA:
-            trace = self.dig.readTracesSinglePort(1)
-            self.data['Channel A - Averaged Data'] = trace[start:end]
+            avgTrace, traces = self.dig.readTracesSinglePort(1, bGetAllChA)
+            self.data['Channel A - Averaged Data'] = avgTrace[start:end]
+            if traces is not None:
+                self.data['Channel A - Flattened Data'] = \
+                        traces[:,start:end].flatten() 
         if bGetChB:
-            trace = self.dig.readTracesSinglePort(2)
-            self.data['Channel B - Averaged Data'] = trace[start:end]
+            avgTrace, traces = self.dig.readTracesSinglePort(2, bGetAllChB)
+            self.data['Channel B - Averaged Data'] = avgTrace[start:end]
+            if traces is not None:
+                self.data['Channel B - Flattened Data'] = \
+                        traces[:,start:end].flatten() 
 
 
 if __name__ == '__main__':

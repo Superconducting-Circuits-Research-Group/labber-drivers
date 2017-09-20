@@ -4,87 +4,12 @@ import numpy as np
 import ctypes
 
 from atsapi import *
-from ctypes import (c_int, c_uint8, c_uint16, c_uint32, c_int32,
-                    c_float, c_char_p, c_void_p, c_long, byref, windll)
+from ctypes import (c_int, c_int32, c_uint8, c_uint16, c_uint32, 
+                    c_float, c_char_p, c_void_p, c_long, byref)
 
 # add logger, to allow logging to Labber's instrument log
 import logging
 log = logging.getLogger('LabberDriver')
-
-# define constants
-# ADMA_NPT = 0x200
-# ADMA_EXTERNAL_STARTCAPTURE = 0x1
-
-# match naming convertinos in DLL
-# U8 = c_uint8
-# U16 = c_uint16
-# U32 = c_uint32
-
-
-# class DMABuffer:
-    # """"Buffer for DMA"""
-
-    # def __init__(self, c_sample_type, size_bytes):
-        # self.size_bytes = size_bytes
-
-        # npSampleType = {
-            # c_uint8: np.uint8,
-            # c_uint16: np.uint16,
-            # c_uint32: np.uint32,
-            # c_int32: np.int32,
-            # c_float: np.float32}.get(c_sample_type, 0)
-
-        # bytes_per_sample = {
-            # c_uint8: 1,
-            # c_uint16: 2,
-            # c_uint32: 4,
-            # c_int32: 4,
-            # c_float: 4}.get(c_sample_type, 0)
-
-        # self.addr = None
-        # if os.name == 'nt':
-            # MEM_COMMIT = 0x1000
-            # PAGE_READWRITE = 0x4
-            # windll.kernel32.VirtualAlloc.argtypes = [c_void_p, c_long,
-                                                     # c_long, c_long]
-            # windll.kernel32.VirtualAlloc.restype = c_void_p
-            # self.addr = windll.kernel32.VirtualAlloc(
-                # 0, c_long(size_bytes), MEM_COMMIT, PAGE_READWRITE)
-        # elif os.name == 'posix':
-            # libc.valloc.argtypes = [c_long]
-            # libc.valloc.restype = c_void_p
-            # self.addr = libc.valloc(size_bytes)
-        # else:
-            # raise Exception("Unsupported OS.")
-
-        # ctypes_array = (c_sample_type * (size_bytes //
-                                         # bytes_per_sample)).from_address(self.addr)
-        # self.buffer = np.frombuffer(ctypes_array, dtype=npSampleType)
-        # self.ctypes_buffer = ctypes_array
-        # pointer, read_only_flag = self.buffer.__array_interface__['data']
-
-    # def __exit__(self):
-        # if os.name == 'nt':
-            # MEM_RELEASE = 0x8000
-            # windll.kernel32.VirtualFree.argtypes = [c_void_p, c_long,
-                                                    # c_long]
-            # windll.kernel32.VirtualFree.restype = c_int
-            # windll.kernel32.VirtualFree(c_void_p(self.addr), 0,
-                                        # MEM_RELEASE)
-        # elif os.name == 'posix':
-            # libc.free(self.addr)
-        # else:
-            # raise Exception("Unsupported OS.")
-
-
-# open DLL
-# try:
-    # DLL = ctypes.CDLL('ATSApi')
-# except BaseException:
-    # # if failure, try to open in driver folder
-    # sPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         # 'atsapi')
-    # DLL = ctypes.CDLL(os.path.join(sPath, 'ATSApi'))
 
 
 class AlazarTechDigitizer():
@@ -266,7 +191,8 @@ class AlazarTechDigitizer():
                       bConfig=True, bArm=True, bMeasure=True,
                       funcStop=None, funcProgress=None,
                       timeout=None, firstTimeout=None,
-                      maxBuffers=8, maxBufferSizeMB=64):
+                      maxBuffers=8, maxBufferSizeMB=64,
+                      bGetAllTraces=False):
         """Reads traces in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
@@ -278,7 +204,7 @@ class AlazarTechDigitizer():
         firstTimeout = timeout if firstTimeout is None else firstTimeout
 
         # change alignment to be 64
-        samplesPerRecord = 64 * (nSamples + 63) // 64
+        samplesPerRecord = 64 * ((nSamples + 63) // 64)
 
         # select the active channels
         channels = int(bGetChA) | int(bGetChB) << 1
@@ -313,9 +239,9 @@ class AlazarTechDigitizer():
                 'values that could be factorized into small prime '
                 'factors (values that are powers of 2 are most '
                 'preferable).')
-        buffersPerAcquisition = nRecord / recordsPerBuffer
+        buffersPerAcquisition = int(nRecord / recordsPerBuffer)
         # do not allocate more buffers than needed for all data
-        bufferCount = int(min(2 * (buffersPerAcquisition + 1) // 2,
+        bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
         lT.append('Total buffers needed: %d' % buffersPerAcquisition)
         lT.append('Buffer count: %d' % bufferCount)
@@ -362,17 +288,23 @@ class AlazarTechDigitizer():
             return
 
         lT.append('Post: %.1f ms' % (1000 * (time.clock() - t0)))
-        bufferSum = np.zeros((numberOfChannels,
-                              recordsPerBuffer,
-                              samplesPerRecord), dtype=np.float32)
-        try:
+        
+        # initialize data array
+        avgTrace = np.zeros((numberOfChannels,
+                             recordsPerBuffer,
+                             samplesPerRecord), dtype=np.float32)
+        if bGetAllTraces:
+            bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
+            samples = buffersPerAcquisition * bufferSize
+            if bytesPerSample == 1:
+                traces = np.empty(samples, dtype=np.uint8)
+            elif bytesPerSample == 2:
+                traces = np.empty(samples, dtype=np.uint16)
+            else:
+                traces = np.empty(samples, dtype=np.uint32)
+
             lT.append('Start: %.1f ms' % (1000 * (time.clock() - t0)))
             buffersCompleted = 0
-            bytesTransferred = 0
-            # initialize data array
-            nPtsOut = samplesPerRecord * nRecord
-            vData = [np.zeros(nPtsOut, dtype=float),
-                     np.zeros(nPtsOut, dtype=float)]
             # range and zero for conversion to voltages
             codeZero = float(1 << (self.bitsPerSample - 1)) - .5
             codeRange = float(1 << (self.bitsPerSample - 1)) - .5
@@ -384,6 +316,7 @@ class AlazarTechDigitizer():
             log.info(str(lT))
             lT = []
 
+        try:
             while (buffersCompleted < buffersPerAcquisition):
                 # wait for the buffer at the head of the list of
                 # available buffers to be filled by the board
@@ -394,9 +327,6 @@ class AlazarTechDigitizer():
                 # reset timeout time, can be different than first call
                 timeout_ms = int(1000. * timeout)
 
-                buffersCompleted += 1
-                bytesTransferred += buf.size_bytes
-
                 # break if stopped from outside
                 if funcStop is not None and funcStop():
                     break
@@ -405,21 +335,27 @@ class AlazarTechDigitizer():
                     funcProgress(float(buffersCompleted) /
                                  float(buffersPerAcquisition))
 
-                records = buf.buffer.astype(np.float32, copy=False)
-                records.shape = (numberOfChannels,
-                                 recordsPerBuffer,
-                                 samplesPerRecord)
-
-                records -= codeZero
+                if bGetAllTraces:
+                    bufferPosition = bufferSize * buffersCompleted
+                    traces[bufferPosition:bufferPosition + bufferSize] = \
+                        buf.buffer
+                                 
+                bufferRecords = buf.buffer.astype(np.float32, copy=False)
+                bufferRecords.shape = (numberOfChannels,
+                                       recordsPerBuffer,
+                                       samplesPerRecord)
+                bufferRecords -= codeZero
                 if numberOfChannels == 2:
-                    records[0] *= rangeA
-                    records[1] *= rangeB
+                    bufferRecords[0] *= rangeA
+                    bufferRecords[1] *= rangeB
                 elif bGetChA:
-                    records *= rangeA
+                    bufferRecords *= rangeA
                 else:
-                    records *= rangeB
+                    bufferRecords *= rangeB
+                avgTrace += bufferRecords
 
-                bufferSum += records
+                buffersCompleted += 1
+                
                 # add the buffer to the end of the list of available
                 # buffers
                 self.AlazarPostAsyncBuffer(buf.addr, buf.size_bytes)
@@ -434,13 +370,36 @@ class AlazarTechDigitizer():
         # log timing information
         lT.append('Done: %.1f ms' % (1000 * (time.clock() - t0)))
         log.info(str(lT))
+        
+        if bGetAllTraces:
+            tracesView = traces.view()
+            tracesView.shape = (buffersPerAcquisition, numberOfChannels,
+                                recordsPerBuffer, samplesPerRecord)
+            tracesView = np.rollaxis(tracesView, 2, 1).reshape(nRecord,
+                                numberOfChannels, samplesPerRecord)
+            traces = tracesView.astype(np.float32, copy=False)
 
-        bufferSum /= float(buffersPerAcquisition)
-        avgTraces = np.mean(bufferSum, axis=1)
+            traces -= codeZero
+            if samplesPerRecord != nSamples:
+                traces = traces[:,:,:nSamples]
+            if numberOfChannels == 2:
+                traces[:,0,:] *= rangeA
+                traces[:,1,:] *= rangeB
+                data['Channel A - Flattened Data'] = traces[:,0,:].flatten()
+                data['Channel B - Flattened Data'] = traces[:,1,:].flatten()
+            elif bGetChA:
+                traces *= rangeA
+                data['Channel A - Flattened Data'] = traces.flatten()
+            else:
+                traces *= rangeB
+                data['Channel B - Flattened Data'] = traces.flatten()
+
+        avgTrace /= float(buffersPerAcquisition)
+        avgTraces = np.mean(avgTrace, axis=1)
         # return data - requested vector length, not restricted to
         # 64-bit multiple
         if samplesPerRecord != nSamples:
-            avgTraces = avgTraces[:, :nSamples]
+            avgTraces = avgTraces[:,:nSamples]
         if numberOfChannels == 2:
             data['Channel A - Averaged Data'] = avgTraces[0]
             data['Channel B - Averaged Data'] = avgTraces[1]
@@ -458,7 +417,7 @@ class AlazarTechDigitizer():
         # remove all
         self.buffers = []
 
-    def readTracesSinglePort(self, Channel):
+    def readTracesSinglePort(self, Channel, bGetAllTraces):
         """Reads traces, converts to float, averages to a single trace."""
         # define sizes
         bytesPerSample = (self.bitsPerSample + 7) // 8
@@ -469,16 +428,25 @@ class AlazarTechDigitizer():
         codeRange = float(1 << (self.bitsPerSample - 1)) - .5
         voltScale = self.dRange[Channel] / codeRange
         # initialize a scaled float vector
-        vData = np.zeros(samplesPerRecord, dtype=float)
+        avgTrace = np.zeros(samplesPerRecord, dtype=float)
+        if bGetAllTraces:
+            traces = np.empty((self.nRecord, samplesPerRecord), dtype=float)
+        else:
+            traces = None
         for n in range(self.nRecord):
             self.AlazarRead(Channel, dataBuffer, bytesPerSample, n + 1,
                             -self.nPreSize, samplesPerRecord)
-            # convert and scale to float, add to output vector
-            vBuffer = np.array(dataBuffer[:samplesPerRecord])
-            vData += voltScale * (vBuffer - codeZero)
+            # convert and scale to float
+            vBuffer = np.array(dataBuffer, dtype=float)
+            vBuffer -= codeZero
+            vBuffer *= voltScale
+            if bGetAllTraces:
+                traces[n] = vBuffer
+            # add to output vector
+            avgTrace += vBuffer
         # normalize
-        vData /= float(self.nRecord)
-        return vData
+        avgTrace /= float(self.nRecord)
+        return avgTrace, traces
 
 
 if __name__ == '__main__':
