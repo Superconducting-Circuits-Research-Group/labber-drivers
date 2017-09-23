@@ -9,7 +9,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def performOpen(self, options={}):
         """Perform the operation of opening the instrument connection."""
-        # keep track of sampled traces
+        # keep track of sampled records
         self.data = {}
         self.dt = 1.0
         # open connection
@@ -43,26 +43,31 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation."""
-        # only implemented for traces
-        if quant.name in ('Channel A - Averaged Data',
-                          'Channel B - Averaged Data',
-                          'Channel A - Flattened Data',
-                          'Channel B - Flattened Data'):
+        # only implemented for records
+        if quant.name in ('Channel A - Averaged data',
+                          'Channel B - Averaged data',
+                          'Channel A - Flattened data',
+                          'Channel B - Flattened data'):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 return self.getSignalHardwareLoop(quant, options)
-            # check if first call, if so get new traces
+            # check if first call, if so get new records
             if self.isFirstCall(options):
                 # clear trace buffer
                 self.data = {}
-                # read traces
+                # read records
                 if self.getValue('NPT AsyncDMA Enabled'):
-                    self.getTracesDMA(
+                    self.getRecordsDMA(
                         hardware_trig=self.isHardwareTrig(options))
                 else:
-                    self.getTracesSinglePort()
+                    self.getRecordsSinglePort()
             # return correct data
-            value = quant.getTraceDict(self.data[quant.name], dt=self.dt)
+            try:
+                value = quant.getTraceDict(self.data[quant.name], dt=self.dt)
+            except KeyError:
+                raise KeyError("Select 'Keep all records' in "
+                        "'Acquisition' to acquire '%s - Flattened data'."
+                        % quant.name[:9])
         else:
             # just return the quantity value
             value = quant.getValue()
@@ -87,24 +92,23 @@ class Driver(InstrumentDriver.InstrumentWorker):
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             # need to re-configure the card since record size was not
             # known at config
-            self.dig.readTracesDMA(bGetChA, bGetChB,
+            self.dig.readRecordsDMA(bGetChA, bGetChB,
                 nSample, n_seq,
-                recordsPerBuffer,
                 bConfig=True, bArm=True, bMeasure=False,
-                bufferSize=maxBufferSize,
-                maxBuffers=nMaxBuffer)
+                maxBuffers=maxBuffers,
+                maxBufferSize=maxBufferSize)
         else:
             # if not hardware looping, just trigger the card, buffers
             # are already configured
-            self.dig.readTracesDMA(bGetChA, bGetChB,
+            self.dig.readRecordsDMA(bGetChA, bGetChB,
                 nSample, nRecord,
                 bConfig=False, bArm=True, bMeasure=False,
                 maxBuffers=maxBuffers,
-                maxBufferSizeMB=maxBufferSizeMB)
+                maxBufferSize=maxBufferSize)
 
     def _callbackProgress(self, progress):
         """Report progress to server, as text string."""
-        s = 'Acquiring traces (%.0f%%)' % (100 * progress)
+        s = 'Acquiring records (%.0f%%)' % (100 * progress)
         self.reportStatus(s)
 
     def getSignalHardwareLoop(self, quant, options):
@@ -115,24 +119,24 @@ class Driver(InstrumentDriver.InstrumentWorker):
             bGetChA = bool(self.getValue('Channel A - Enabled'))
             bGetChB = bool(self.getValue('Channel B - Enabled'))
             nSample = int(self.getValue('Number of samples'))
-            maxBufferSizeMB = int(self.getValue('Max buffer size'))
+            maxBufferSize = int(self.getValue('Max buffer size'))
             maxBuffers = int(self.getValue('Max number of buffers'))
             # show status before starting acquisition
             self.reportStatus('Digitizer - Waiting for signal')
             # get data
-            data = self.dig.readTracesDMA(bGetChA, bGetChB,
+            data = self.dig.readRecordsDMA(bGetChA, bGetChB,
                 nSample, n_seq,
                 bConfig=False, bArm=False, bMeasure=True,
                 funcStop=self.isStopped,
                 funcProgress=self._callbackProgress,
                 firstTimeout=self.dComCfg['Timeout'] + 180.0,
-                maxBuffers=maxBuffers, maxBufferSizeMB=maxBufferSizeMB)
+                maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
             # re-shape data and place in trace buffer
-            self.data['Channel A - Averaged Data'] = \
-                data['Channel A - Averaged Data'].reshape((n_seq,
+            self.data['Channel A - Averaged data'] = \
+                data['Channel A - Averaged data'].reshape((n_seq,
                                                            nSample))
-            self.data['Channel B - Averaged Data'] = \
-                data['Channel B - Averaged Data'].reshape((n_seq,
+            self.data['Channel B - Averaged data'] = \
+                data['Channel B - Averaged data'].reshape((n_seq,
                                                            nSample))
         # after getting data, pick values to return
         return quant.getTraceDict(self.data[quant.name], dt=self.dt)
@@ -199,9 +203,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                                             Impedance)
                 # bandwidth limit, only for model 9870
                 if self.getModel() in ('9870',):
-                    BW = int(self.getValue('%s - Bandwidth limit'
-                                           % chnls[n]))
-                    self.dig.AlazarSetBWLimit(n, BW)
+                    self.dig.AlazarSetBWLimit(n, 0)
 
         # configure trigger
         Source = int(self.getCmdStringFromValue('Trigger source'))
@@ -242,44 +244,42 @@ class Driver(InstrumentDriver.InstrumentWorker):
         bGetChB = bool(self.getValue('Channel B - Enabled'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
-        maxBufferSizeMB = int(self.getValue('Max buffer size'))
+        maxBufferSize = int(self.getValue('Max buffer size'))
         maxBuffers = int(self.getValue('Max number of buffers'))
         # configure DMA read
-        self.dig.readTracesDMA(bGetChA, bGetChB,
+        self.dig.readRecordsDMA(bGetChA, bGetChB,
             nPostSize, nRecord,
             bConfig=True, bArm=False, bMeasure=False,
-            maxBuffers=maxBuffers, maxBufferSizeMB=maxBufferSizeMB)
+            maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
 
-    def getTracesDMA(self, hardware_trig=False):
+    def getRecordsDMA(self, hardware_trig=False):
         """Resample the data with DMA."""
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
-        bGetAllChA = bool(self.getValue('Channel A - Keep All Traces'))
-        bGetAllChB = bool(self.getValue('Channel B - Keep All Traces'))
+        bGetAllRecords = bool(self.getValue('Keep all records'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
-        maxBufferSizeMB = int(self.getValue('Max buffer size'))
+        maxBufferSize = int(self.getValue('Max buffer size'))
         maxBuffers = int(self.getValue('Max number of buffers'))
         # in hardware triggering mode, there is no noed to re-arm
         # the card
         bArm = not hardware_trig
         # get data
-        self.data = self.dig.readTracesDMA(
+        self.data = self.dig.readRecordsDMA(
             bGetChA, bGetChB,
             nPostSize, nRecord,
             bConfig=False, bArm=bArm, bMeasure=True,
             funcStop=self.isStopped,
-            maxBuffers=maxBuffers, maxBufferSizeMB=maxBufferSizeMB,
-            bGetAllTraces=(bGetAllChA | bGetAllChB))
+            maxBuffers=maxBuffers, maxBufferSize=maxBufferSize,
+            bGetAllRecords=bGetAllRecords)
 
-    def getTracesSinglePort(self):
+    def getRecordsSinglePort(self):
         """Resample the data."""
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
-        bGetAllChA = bool(self.getValue('Channel A - Keep All Traces'))
-        bGetAllChB = bool(self.getValue('Channel B - Keep All Traces'))
+        bGetAllRecords = bool(self.getValue('Keep all records'))
         nPreSize = int(self.getValue('Pre-trigger samples'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
@@ -297,7 +297,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             start = nPreAlgn - nPreSize
             end = start + nPreSize + nPostSize
         else:
-            raise NotImplementedError('Model ATS%s is not yet supported.')
+            raise NotImplementedError('Model ATS%s is not yet supported.'
+                                      % model)
 
         self.dig.AlazarSetRecordSize(nPreAlgn, nPostAlgn)
         self.dig.AlazarSetRecordCount(nRecord)
@@ -319,17 +320,19 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         # read data for channels in use
         if bGetChA:
-            avgTrace, traces = self.dig.readTracesSinglePort(1, bGetAllChA)
-            self.data['Channel A - Averaged Data'] = avgTrace[start:end]
-            if traces is not None:
-                self.data['Channel A - Flattened Data'] = \
-                        traces[:,start:end].flatten() 
+            avgRecord, records = self.dig.readRecordsSinglePort(1,
+                    bGetAllRecords)
+            self.data['Channel A - Averaged data'] = avgRecord[start:end]
+            if records is not None:
+                self.data['Channel A - Flattened data'] = \
+                        records[:,start:end].flatten() 
         if bGetChB:
-            avgTrace, traces = self.dig.readTracesSinglePort(2, bGetAllChB)
-            self.data['Channel B - Averaged Data'] = avgTrace[start:end]
-            if traces is not None:
-                self.data['Channel B - Flattened Data'] = \
-                        traces[:,start:end].flatten() 
+            avgRecord, records = self.dig.readRecordsSinglePort(2,
+                    bGetAllRecords)
+            self.data['Channel B - Averaged data'] = avgRecord[start:end]
+            if records is not None:
+                self.data['Channel B - Flattened data'] = \
+                        records[:,start:end].flatten() 
 
 
 if __name__ == '__main__':

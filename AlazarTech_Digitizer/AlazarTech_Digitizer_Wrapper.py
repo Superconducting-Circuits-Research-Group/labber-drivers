@@ -186,14 +186,14 @@ class AlazarTechDigitizer():
         self.callFunc('AlazarWaitAsyncBufferComplete', self.handle,
                       buffer, timeout_ms)
 
-    def readTracesDMA(self, bGetChA, bGetChB,
+    def readRecordsDMA(self, bGetChA, bGetChB,
                       nSamples, nRecord,
                       bConfig=True, bArm=True, bMeasure=True,
                       funcStop=None, funcProgress=None,
                       timeout=None, firstTimeout=None,
-                      maxBuffers=8, maxBufferSizeMB=64,
-                      bGetAllTraces=False):
-        """Reads traces in NPT AutoDMA mode, converts to float,
+                      maxBuffers=8, maxBufferSize=64,
+                      bGetAllRecords=False):
+        """Reads records in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
         t0 = time.clock()
@@ -217,36 +217,41 @@ class AlazarTechDigitizer():
         # compute the number of bytes per record and per buffer
         bytesPerSample = (self.bitsPerSample + 7) // 8
         bytesPerRecord = bytesPerSample * samplesPerRecord
-        maxMemSize = int(maxBufferSizeMB * 2**20)
         buffersPerAcquisition = 1
         recordsPerBuffer = nRecord
+        nResidual = nRecord
         consistencyFlag = False
         while not consistencyFlag:
             bytesPerBuffer = int(numberOfChannels * recordsPerBuffer *
                                  bytesPerRecord)
-            if bytesPerBuffer > maxMemSize:
-                for factor in range(1, int(np.sqrt(nRecord)) + 1):
-                    if nRecord % factor == 0:
+            if bytesPerBuffer > maxBufferSize:
+                noFactorFlag = True
+                for factor in range(2, int(np.sqrt(nResidual)) + 2):
+                    if nResidual % factor == 0:
                         recordsPerBuffer = int(recordsPerBuffer / factor)
-                    else:
+                        nResidual = int(nResidual / factor)
+                        noFactorFlag = False
                         break
+                if noFactorFlag:
+                    break
             else:
                 consistencyFlag = True
         if not consistencyFlag:
             raise MemoryError('The number of records and the number '
                 'of samples in a single record is not consistent '
                 'with the allowed maximum buffer size. Try to use '
-                'values that could be factorized into small prime '
-                'factors (values that are powers of 2 are most '
-                'preferable).')
+                'parameter values that could be factorized into small '
+                'prime numbers (values that are powers of 2 are most '
+                'preferable). Alternatively, try to increase the '
+                'maximum buffer size.')
         buffersPerAcquisition = int(nRecord / recordsPerBuffer)
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
-        lT.append('Total buffers needed: %d' % buffersPerAcquisition)
-        lT.append('Buffer count: %d' % bufferCount)
-        lT.append('Buffer size [MB]: %f' % (float(bytesPerBuffer) / 2**20))
-        lT.append('Records per buffer: %d' % recordsPerBuffer)
+        lT.append('Total buffers needed: %d.\n' % buffersPerAcquisition)
+        lT.append('Buffer count: %d.\n' % bufferCount)
+        lT.append('Buffer size [B]: %f.\n' % (float(bytesPerBuffer)))
+        lT.append('Records per buffer: %d.\n' % recordsPerBuffer)
 
         # configure board, if wanted
         if bConfig:
@@ -290,31 +295,31 @@ class AlazarTechDigitizer():
         lT.append('Post: %.1f ms' % (1000 * (time.clock() - t0)))
         
         # initialize data array
-        avgTrace = np.zeros((numberOfChannels,
+        avgRecord = np.zeros((numberOfChannels,
                              recordsPerBuffer,
                              samplesPerRecord), dtype=np.float32)
-        if bGetAllTraces:
+        if bGetAllRecords:
             bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
             samples = buffersPerAcquisition * bufferSize
             if bytesPerSample == 1:
-                traces = np.empty(samples, dtype=np.uint8)
+                records = np.empty(samples, dtype=np.uint8)
             elif bytesPerSample == 2:
-                traces = np.empty(samples, dtype=np.uint16)
+                records = np.empty(samples, dtype=np.uint16)
             else:
-                traces = np.empty(samples, dtype=np.uint32)
+                records = np.empty(samples, dtype=np.uint32)
 
-            lT.append('Start: %.1f ms' % (1000 * (time.clock() - t0)))
-            buffersCompleted = 0
-            # range and zero for conversion to voltages
-            codeZero = float(1 << (self.bitsPerSample - 1)) - .5
-            codeRange = float(1 << (self.bitsPerSample - 1)) - .5
-            # range and zero for each channel, combined with bit shifting
-            rangeA = self.dRange[1] / codeRange
-            rangeB = self.dRange[2] / codeRange
+        lT.append('Start: %.1f ms' % (1000 * (time.clock() - t0)))
+        buffersCompleted = 0
+        # range and zero for conversion to voltages
+        codeZero = float(1 << (self.bitsPerSample - 1)) - .5
+        codeRange = float(1 << (self.bitsPerSample - 1)) - .5
+        # range and zero for each channel, combined with bit shifting
+        rangeA = self.dRange[1] / codeRange
+        rangeB = self.dRange[2] / codeRange
 
-            timeout_ms = int(1000 * firstTimeout)
-            log.info(str(lT))
-            lT = []
+        timeout_ms = int(1000 * firstTimeout)
+        log.info(str(lT))
+        lT = []
 
         try:
             while (buffersCompleted < buffersPerAcquisition):
@@ -335,9 +340,9 @@ class AlazarTechDigitizer():
                     funcProgress(float(buffersCompleted) /
                                  float(buffersPerAcquisition))
 
-                if bGetAllTraces:
+                if bGetAllRecords:
                     bufferPosition = bufferSize * buffersCompleted
-                    traces[bufferPosition:bufferPosition + bufferSize] = \
+                    records[bufferPosition:bufferPosition + bufferSize] = \
                         buf.buffer
                                  
                 bufferRecords = buf.buffer.astype(np.float32, copy=False)
@@ -352,7 +357,7 @@ class AlazarTechDigitizer():
                     bufferRecords *= rangeA
                 else:
                     bufferRecords *= rangeB
-                avgTrace += bufferRecords
+                avgRecord += bufferRecords
 
                 buffersCompleted += 1
                 
@@ -371,42 +376,42 @@ class AlazarTechDigitizer():
         lT.append('Done: %.1f ms' % (1000 * (time.clock() - t0)))
         log.info(str(lT))
         
-        if bGetAllTraces:
-            tracesView = traces.view()
-            tracesView.shape = (buffersPerAcquisition, numberOfChannels,
+        if bGetAllRecords:
+            recordsView = records.view()
+            recordsView.shape = (buffersPerAcquisition, numberOfChannels,
                                 recordsPerBuffer, samplesPerRecord)
-            tracesView = np.rollaxis(tracesView, 2, 1).reshape(nRecord,
+            recordsView = np.rollaxis(recordsView, 2, 1).reshape(nRecord,
                                 numberOfChannels, samplesPerRecord)
-            traces = tracesView.astype(np.float32, copy=False)
+            records = recordsView.astype(np.float32, copy=False)
 
-            traces -= codeZero
+            records -= codeZero
             if samplesPerRecord != nSamples:
-                traces = traces[:,:,:nSamples]
+                records = records[:,:,:nSamples]
             if numberOfChannels == 2:
-                traces[:,0,:] *= rangeA
-                traces[:,1,:] *= rangeB
-                data['Channel A - Flattened Data'] = traces[:,0,:].flatten()
-                data['Channel B - Flattened Data'] = traces[:,1,:].flatten()
+                records[:,0,:] *= rangeA
+                records[:,1,:] *= rangeB
+                data['Channel A - Flattened data'] = records[:,0,:].flatten()
+                data['Channel B - Flattened data'] = records[:,1,:].flatten()
             elif bGetChA:
-                traces *= rangeA
-                data['Channel A - Flattened Data'] = traces.flatten()
+                records *= rangeA
+                data['Channel A - Flattened data'] = records.flatten()
             else:
-                traces *= rangeB
-                data['Channel B - Flattened Data'] = traces.flatten()
+                records *= rangeB
+                data['Channel B - Flattened data'] = records.flatten()
 
-        avgTrace /= float(buffersPerAcquisition)
-        avgTraces = np.mean(avgTrace, axis=1)
+        avgRecord /= float(buffersPerAcquisition)
+        avgRecords = np.mean(avgRecord, axis=1)
         # return data - requested vector length, not restricted to
         # 64-bit multiple
         if samplesPerRecord != nSamples:
-            avgTraces = avgTraces[:,:nSamples]
+            avgRecords = avgRecords[:,:nSamples]
         if numberOfChannels == 2:
-            data['Channel A - Averaged Data'] = avgTraces[0]
-            data['Channel B - Averaged Data'] = avgTraces[1]
+            data['Channel A - Averaged data'] = avgRecords[0]
+            data['Channel B - Averaged data'] = avgRecords[1]
         elif bGetChA:
-            data['Channel A - Averaged Data'] = avgTraces[0]
+            data['Channel A - Averaged data'] = avgRecords[0]
         else:
-            data['Channel A - Averaged Data'] = avgTraces[1]
+            data['Channel A - Averaged data'] = avgRecords[1]
         return data
 
     def removeBuffersDMA(self):
@@ -417,8 +422,8 @@ class AlazarTechDigitizer():
         # remove all
         self.buffers = []
 
-    def readTracesSinglePort(self, Channel, bGetAllTraces):
-        """Reads traces, converts to float, averages to a single trace."""
+    def readRecordsSinglePort(self, Channel, bGetAllRecords):
+        """Reads records, converts to float, averages to a single trace."""
         # define sizes
         bytesPerSample = (self.bitsPerSample + 7) // 8
         samplesPerRecord = self.nPreSize + self.nPostSize
@@ -428,11 +433,11 @@ class AlazarTechDigitizer():
         codeRange = float(1 << (self.bitsPerSample - 1)) - .5
         voltScale = self.dRange[Channel] / codeRange
         # initialize a scaled float vector
-        avgTrace = np.zeros(samplesPerRecord, dtype=float)
-        if bGetAllTraces:
-            traces = np.empty((self.nRecord, samplesPerRecord), dtype=float)
+        avgRecord = np.zeros(samplesPerRecord, dtype=float)
+        if bGetAllRecords:
+            records = np.empty((self.nRecord, samplesPerRecord), dtype=float)
         else:
-            traces = None
+            records = None
         for n in range(self.nRecord):
             self.AlazarRead(Channel, dataBuffer, bytesPerSample, n + 1,
                             -self.nPreSize, samplesPerRecord)
@@ -440,13 +445,13 @@ class AlazarTechDigitizer():
             vBuffer = np.array(dataBuffer, dtype=float)
             vBuffer -= codeZero
             vBuffer *= voltScale
-            if bGetAllTraces:
-                traces[n] = vBuffer
+            if bGetAllRecords:
+                records[n] = vBuffer
             # add to output vector
-            avgTrace += vBuffer
+            avgRecord += vBuffer
         # normalize
-        avgTrace /= float(self.nRecord)
-        return avgTrace, traces
+        avgRecord /= float(self.nRecord)
+        return avgRecord, records
 
 
 if __name__ == '__main__':
