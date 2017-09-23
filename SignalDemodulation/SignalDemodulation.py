@@ -21,38 +21,50 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation."""
-        if quant.name == 'Value':
-            value = np.mean(self.getIQAmplitudes())
-        elif quant.name == 'Value - Single shot':
-            value = self.getIQAmplitudes()
+        if self.isFirstCall(options):
+            # clear record buffer
+            self.data = {}
+        if quant.name in ('Value', 'Value - Single shot'):
+            if quant.name not in self.data:
+                self.getIQData()
+            return self.data[quant.name]
         elif quant.name.startswith('Value #'):
-            index = int(quant.name[-1])
-            sDemodFreq = 'Mod. frequency #%d' % index
-            dFreq = self.getValue(sDemodFreq)
-            value = np.mean(self.getIQAmplitudes_MultiFreq(dFreq))
+            if quant.name not in self.data:
+                index = int(quant.name[-1])
+                sDemodFreq = 'Mod. frequency #%d' % index
+                dFreq = self.getValue(sDemodFreq)
+                self.getIQData(index, dFreq)
+            return self.data[quant.name]
         else:
             # just return the quantity value
-            value = quant.getValue()
-        return value
+            return quant.getValue()
 
-    def getIQAmplitudes(self, dFreq=None):
+    def getIQData(self, index=None, dFreq=None):
         """Calculate complex signal from data and reference."""
         # get parameters
+        if index is None:
+            sValue = 'Value'
+            sSingleShot = 'Value - Single shot'
+        else:
+            sValue = 'Value #%d' % index
+            sSingleShot = 'Value #%d - Single shot' % index
         if dFreq is None:
             dFreq = self.getValue('Modulation frequency')
         skipStart = self.getValue('Skip start')
         nSegment = int(self.getValue('Number of segments'))
         # get input data from dictionary, dictionary format:
         # {'y': value, 't0': t0, 'dt': dt}
-        traceIn = self.getValue('Input data')
-        if traceIn is None:
-            return complex(0.0)
-        vY = traceIn['y']
-        nTotLength = vY.size
+        recordIn = self.getValue('Input data')
+        if recordIn is None:
+            self.data[sValue] = np.NaN
+            self.data[sSingleShot] = np.NaN
+            return
+        vData = recordIn['y']
+        nTotLength = vData.size
         if nTotLength % nSegment != 0:
             raise ValueError('Total record length should be exactly '
                              'a multiple of segments.')
-        dt = traceIn['dt']
+        dt = recordIn['dt']
         # avoid exceptions if no time step is given
         if dt == 0:
             dt = 1.0
@@ -61,29 +73,34 @@ class Driver(InstrumentDriver.InstrumentWorker):
         segmentLength = int(nTotLength / nSegment)
         length = min(length, segmentLength - skipIndex)
         if length <= 1:
-            return complex(0.0)
-        # define data to use, put in 2d array of segments
-        vData = np.reshape(vY, (nSegment, segmentLength))
+            self.data[sValue] = np.NaN
+            self.data[sSingleShot] = np.NaN
+            return
+        # define data to use, put in 2D array of segments
+        vData.shape = (nSegment, segmentLength)
         # calculate cos/sin vectors, allow segmenting
         vTime = dt * (skipIndex + np.arange(length, dtype=float))
-        vPhase = 2 * np.pi * vTime * dFreq
-        vExp = np.exp(1j * vPhase)
+        vExp = np.exp(2.j * np.pi * vTime * dFreq)
         # calc I/Q
         signal = np.empty(nSegment, dtype=complex)
         np.dot(vData[:,skipIndex:skipIndex+length], vExp, signal)
         signal /= .5 * float(length - 1)
         bUseRef = bool(self.getValue('Use phase reference signal'))
         if bUseRef:
-            traceRef = self.getValue('Reference data')
-            # skip reference if trace length doesn't match
-            if len(traceRef['y']) != len(vY):
-                return signal
-            vRef = np.reshape(traceRef['y'], (nSegment, segmentLength))
+            vRef = self.getValue('Reference data')
+            # skip reference if record length doesn't match
+            vRef = vRef['y']
+            if vRef.size != nTotLength:
+                raise ValueError('The data and reference record '
+                        'lengths do not match.')
+            vRef.shape = (nSegment, segmentLength)
             ref = np.empty(nSegment, dtype=complex)
             np.dot(vRef[:,skipIndex:skipIndex+length], vExp, ref)
             # subtract the reference angle
             signal *= np.exp(-1j * np.angle(ref))
-        return signal
+        self.data[sValue] = np.mean(signal)
+        self.data[sSingleShot] = signal
+        return
 
 
 if __name__ == '__main__':

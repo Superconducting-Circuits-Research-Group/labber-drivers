@@ -65,9 +65,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
             try:
                 value = quant.getTraceDict(self.data[quant.name], dt=self.dt)
             except KeyError:
-                raise KeyError("Select 'Keep all records' in "
-                        "'Acquisition' to acquire '%s - Flattened data'."
-                        % quant.name[:9])
+                raise KeyError("Select 'Keep all records' in the "
+                        "'Acquisition' tab to acquire "
+                        "'%s - Flattened data'." % quant.name[:9])
         else:
             # just return the quantity value
             value = quant.getValue()
