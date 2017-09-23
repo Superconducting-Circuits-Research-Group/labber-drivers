@@ -80,9 +80,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 return signal
             vRef = np.reshape(traceRef['y'], (nSegment, segmentLength))
             ref = np.empty(nSegment, dtype=complex)
-            np.dot(vData[:,skipIndex:skipIndex+length], vExp, ref)
+            np.dot(vRef[:,skipIndex:skipIndex+length], vExp, ref)
             # subtract the reference angle
-            signal -= np.exp(1j * np.angle(ref))
+            signal *= np.exp(-1j * np.angle(ref))
         return signal
 
 
