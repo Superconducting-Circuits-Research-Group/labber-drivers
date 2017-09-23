@@ -248,10 +248,10 @@ class AlazarTechDigitizer():
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
-        lT.append('Total buffers needed: %d.\n' % buffersPerAcquisition)
-        lT.append('Buffer count: %d.\n' % bufferCount)
-        lT.append('Buffer size [B]: %f.\n' % (float(bytesPerBuffer)))
-        lT.append('Records per buffer: %d.\n' % recordsPerBuffer)
+        lT.append('Total buffers needed: %d.' % buffersPerAcquisition)
+        lT.append('Buffer count: %d.' % bufferCount)
+        lT.append('Buffer size [B]: %f.' % (float(bytesPerBuffer)))
+        lT.append('Records per buffer: %d.' % recordsPerBuffer)
 
         # configure board, if wanted
         if bConfig:
