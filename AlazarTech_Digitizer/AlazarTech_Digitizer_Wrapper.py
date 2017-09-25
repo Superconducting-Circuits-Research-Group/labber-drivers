@@ -196,14 +196,6 @@ class AlazarTechDigitizer():
         """Reads records in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
-        # use global timeout if not given
-        timeout = self.timeout if timeout is None else timeout
-        # first timeout can be different in case of slow initial arming
-        firstTimeout = timeout if firstTimeout is None else firstTimeout
-
-        # change alignment to be 64
-        samplesPerRecord = 64 * ((nSamples + 63) // 64)
-
         # select the active channels
         channels = int(bGetChA) | int(bGetChB) << 1
         numberOfChannels = int(bGetChA) + int(bGetChB)
@@ -211,6 +203,14 @@ class AlazarTechDigitizer():
         data = {}
         if numberOfChannels == 0:
             return data
+        
+        # use global timeout if not given
+        timeout = self.timeout if timeout is None else timeout
+        # first timeout can be different in case of slow initial arming
+        firstTimeout = timeout if firstTimeout is None else firstTimeout
+
+        # change alignment to be 64
+        samplesPerRecord = 64 * ((nSamples + 63) // 64)
 
         # compute the number of bytes per record and per buffer
         bytesPerSample = (self.bitsPerSample + 7) // 8
@@ -251,15 +251,29 @@ class AlazarTechDigitizer():
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
-        lg = []
-        lg.append('Total buffers needed: %d.' % buffersPerAcquisition)
-        lg.append('Buffer count: %d.' % bufferCount)
-        lg.append('Buffer size [B]: %f.' % (float(bytesPerBuffer)))
-        lg.append('Records per buffer: %d.' % recordsPerBuffer)
-        log.info(str(lg))
 
         # configure board, if wanted
+        if not hasattr(self, '_samplesPerRecord') or \
+                samplesPerRecord != self._samplesPerRecord:
+            bConfig = True
+            self._samplesPerRecord = samplesPerRecord
+        if not hasattr(self, '_nRecord') or \
+                nRecord != self._nRecord:
+            bConfig = True
+            self._nRecord = nRecord
+        if not hasattr(self, '_bytesPerBuffer') or \
+                bytesPerBuffer != self._bytesPerBuffer:
+            bConfig = True
+            self._bytesPerBuffer = bytesPerBuffer
+        if not hasattr(self, '_bufferCount') or \
+                bufferCount != self._bufferCount:
+            bConfig = True
+            self._bufferCount = bufferCount
         if bConfig:
+            log.info('Buffers per acquisition: %d' % buffersPerAcquisition)
+            log.info('Requested number of buffers: %d' % bufferCount)
+            log.info('Buffer size [MB]: %f' % (float(bytesPerBuffer / 2**20)))
+            log.info('Records per buffer: %d' % recordsPerBuffer)
             self.AlazarSetRecordSize(0, samplesPerRecord)
             self.AlazarSetRecordCount(nRecord)
             # allocate DMA buffers

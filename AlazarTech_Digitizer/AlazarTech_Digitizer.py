@@ -22,10 +22,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performClose(self, bError=False, options={}):
         """Perform the close instrument connection operation."""
         # try to remove buffers
-        try:
-            self.dig.removeBuffersDMA()
-        except BaseException:
-            pass
+        self.dig.removeBuffersDMA()
         # remove digitizer object
         del self.dig
 
@@ -37,7 +34,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         quant.setValue(value)
         # don't do anything until all options are set, then set
         # complete config
-        if self.isFinalCall(options) and self.isConfigUpdated(bReset=True):
+        if self.isFinalCall(options):
             self.setConfiguration()
         return value
 
@@ -108,7 +105,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def _callbackProgress(self, progress):
         """Report progress to server, as text string."""
-        s = 'Acquiring records (%.0f%%)' % (100 * progress)
+        s = 'Acquiring records (%.0f%%).' % (100 * progress)
         self.reportStatus(s)
 
     def getSignalHardwareLoop(self, quant, options):
@@ -189,15 +186,12 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     InputRange = 7
                     Impedance = 2
                 else:
-                    Coupling = int(
-                        self.getCmdStringFromValue('%s - Coupling'
-                            % chnls[n]))
-                    InputRange = int(
-                        self.getCmdStringFromValue('%s - Range'
-                            % chnls[n]))
-                    Impedance = int(
-                        self.getCmdStringFromValue('%s - Impedance'
-                            % chnls[n]))
+                    Coupling = int(self.getCmdStringFromValue('%s - '
+                            'Coupling' % chnls[n]))
+                    InputRange = int(self.getCmdStringFromValue('%s - '
+                            'Range' % chnls[n]))
+                    Impedance = int(self.getCmdStringFromValue('%s - '
+                            'Impedance' % chnls[n]))
                 # set coupling, input range, impedance
                 self.dig.AlazarInputControl(n, Coupling, InputRange,
                                             Impedance)
