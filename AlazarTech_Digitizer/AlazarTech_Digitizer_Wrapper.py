@@ -320,7 +320,7 @@ class AlazarTechDigitizer():
                 records = np.empty(samples, dtype=np.uint16)
             else:
                 records = np.empty(samples, dtype=np.uint32)
-        avgRecord = np.empty(bufferSize, dtype=np.float32)
+        avgRecord = np.zeros(bufferSize, dtype=np.float32)
 
         buffersCompleted = 0
         # range and zero for conversion to voltages
