@@ -311,8 +311,8 @@ class AlazarTechDigitizer():
             return
         
         # initialize data arrays
+        bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
         if bGetAllRecords:
-            bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
             samples = buffersPerAcquisition * bufferSize
             if bytesPerSample == 1:
                 records = np.empty(samples, dtype=np.uint8)
