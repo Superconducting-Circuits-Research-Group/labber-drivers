@@ -191,13 +191,11 @@ class AlazarTechDigitizer():
                       bConfig=True, bArm=True, bMeasure=True,
                       funcStop=None, funcProgress=None,
                       timeout=None, firstTimeout=None,
-                      maxBuffers=8, maxBufferSize=64,
+                      maxBuffers=8, maxBufferSize=(2**26),
                       bGetAllRecords=False):
         """Reads records in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
-        t0 = time.clock()
-        lT = []
         # use global timeout if not given
         timeout = self.timeout if timeout is None else timeout
         # first timeout can be different in case of slow initial arming
@@ -217,6 +215,11 @@ class AlazarTechDigitizer():
         # compute the number of bytes per record and per buffer
         bytesPerSample = (self.bitsPerSample + 7) // 8
         bytesPerRecord = bytesPerSample * samplesPerRecord
+
+        if numberOfChannels * bytesPerRecord > maxBufferSize:
+            raise MemoryError('Maximum allowed buffer size '
+                    'is too small to contain even a single record.')
+
         buffersPerAcquisition = 1
         recordsPerBuffer = nRecord
         nResidual = nRecord
@@ -248,10 +251,12 @@ class AlazarTechDigitizer():
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
-        lT.append('Total buffers needed: %d.' % buffersPerAcquisition)
-        lT.append('Buffer count: %d.' % bufferCount)
-        lT.append('Buffer size [B]: %f.' % (float(bytesPerBuffer)))
-        lT.append('Records per buffer: %d.' % recordsPerBuffer)
+        lg = []
+        lg.append('Total buffers needed: %d.' % buffersPerAcquisition)
+        lg.append('Buffer count: %d.' % bufferCount)
+        lg.append('Buffer size [B]: %f.' % (float(bytesPerBuffer)))
+        lg.append('Records per buffer: %d.' % recordsPerBuffer)
+        log.info(str(lg))
 
         # configure board, if wanted
         if bConfig:
@@ -266,7 +271,6 @@ class AlazarTechDigitizer():
             self.removeBuffersDMA()
             # create new buffers
             self.buffers = []
-            log.info('bufferCount %d' % bufferCount)
             for i in range(bufferCount):
                 self.buffers.append(DMABuffer(sample_type,
                                               bytesPerBuffer))
@@ -291,13 +295,8 @@ class AlazarTechDigitizer():
         # if not waiting for result, return here
         if not bMeasure:
             return
-
-        lT.append('Post: %.1f ms' % (1000 * (time.clock() - t0)))
         
-        # initialize data array
-        avgRecord = np.zeros((numberOfChannels,
-                             recordsPerBuffer,
-                             samplesPerRecord), dtype=np.float32)
+        # initialize data arrays
         if bGetAllRecords:
             bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
             samples = buffersPerAcquisition * bufferSize
@@ -307,8 +306,8 @@ class AlazarTechDigitizer():
                 records = np.empty(samples, dtype=np.uint16)
             else:
                 records = np.empty(samples, dtype=np.uint32)
+        avgRecord = np.empty(bufferSize, dtype=np.float32)
 
-        lT.append('Start: %.1f ms' % (1000 * (time.clock() - t0)))
         buffersCompleted = 0
         # range and zero for conversion to voltages
         codeZero = float(1 << (self.bitsPerSample - 1)) - .5
@@ -317,10 +316,7 @@ class AlazarTechDigitizer():
         rangeA = self.dRange[1] / codeRange
         rangeB = self.dRange[2] / codeRange
 
-        timeout_ms = int(1000 * firstTimeout)
-        log.info(str(lT))
-        lT = []
-
+        timeout_ms = int(1000. * firstTimeout)
         try:
             while (buffersCompleted < buffersPerAcquisition):
                 # wait for the buffer at the head of the list of
@@ -329,53 +325,35 @@ class AlazarTechDigitizer():
                 self.AlazarWaitAsyncBufferComplete(buf.addr,
                                                    timeout_ms=timeout_ms)
 
-                # reset timeout time, can be different than first call
-                timeout_ms = int(1000. * timeout)
-
-                # break if stopped from outside
-                if funcStop is not None and funcStop():
-                    break
-                # report progress
-                if funcProgress is not None:
-                    funcProgress(float(buffersCompleted) /
-                                 float(buffersPerAcquisition))
-
                 if bGetAllRecords:
                     bufferPosition = bufferSize * buffersCompleted
                     records[bufferPosition:bufferPosition + bufferSize] = \
                         buf.buffer
-                                 
-                bufferRecords = buf.buffer.astype(np.float32, copy=False)
-                bufferRecords.shape = (numberOfChannels,
-                                       recordsPerBuffer,
-                                       samplesPerRecord)
-                bufferRecords -= codeZero
-                if numberOfChannels == 2:
-                    bufferRecords[0] *= rangeA
-                    bufferRecords[1] *= rangeB
-                elif bGetChA:
-                    bufferRecords *= rangeA
-                else:
-                    bufferRecords *= rangeB
-                avgRecord += bufferRecords
 
-                buffersCompleted += 1
-                
+                avgRecord += buf.buffer.astype(np.float32, copy=False)
+
                 # add the buffer to the end of the list of available
                 # buffers
                 self.AlazarPostAsyncBuffer(buf.addr, buf.size_bytes)
+                
+                buffersCompleted += 1
+                
+                # break if stopped from outside
+                if funcStop is not None and funcStop():
+                    break
+                # reset timeout time, can be different than first call
+                timeout_ms = int(1000. * timeout)
+                # report progress
+                if funcProgress is not None:
+                    funcProgress(float(buffersCompleted) /
+                                 float(buffersPerAcquisition))
         finally:
             # release resources
             try:
                 self.AlazarAbortAsyncRead()
             except BaseException:
-                lT.append('Abort: %.1f ms' % (1000 * (time.clock() - t0)))
                 pass
 
-        # log timing information
-        lT.append('Done: %.1f ms' % (1000 * (time.clock() - t0)))
-        log.info(str(lT))
-        
         if bGetAllRecords:
             recordsView = records.view()
             recordsView.shape = (buffersPerAcquisition, numberOfChannels,
@@ -399,19 +377,31 @@ class AlazarTechDigitizer():
                 records *= rangeB
                 data['Channel B - Flattened data'] = records.flatten()
 
+        avgRecord -= codeZero * buffersCompleted
         avgRecord /= float(buffersPerAcquisition)
-        avgRecords = np.mean(avgRecord, axis=1)
+        avgRecord.shape = (numberOfChannels,
+                           recordsPerBuffer,
+                           samplesPerRecord)
+        if numberOfChannels == 2:
+            avgRecord[0] *= rangeA
+            avgRecord[1] *= rangeB
+        elif bGetChA:
+            avgRecord *= rangeA
+        else:
+            avgRecord *= rangeB
+
+        avgRecord = np.mean(avgRecord, axis=1)
         # return data - requested vector length, not restricted to
         # 64-bit multiple
         if samplesPerRecord != nSamples:
-            avgRecords = avgRecords[:,:nSamples]
+            avgRecord = avgRecord[:,:nSamples]
         if numberOfChannels == 2:
-            data['Channel A - Averaged data'] = avgRecords[0]
-            data['Channel B - Averaged data'] = avgRecords[1]
+            data['Channel A - Averaged data'] = avgRecord[0]
+            data['Channel B - Averaged data'] = avgRecord[1]
         elif bGetChA:
-            data['Channel A - Averaged data'] = avgRecords[0]
+            data['Channel A - Averaged data'] = avgRecord[0]
         else:
-            data['Channel A - Averaged data'] = avgRecords[1]
+            data['Channel A - Averaged data'] = avgRecord[1]
         return data
 
     def removeBuffersDMA(self):

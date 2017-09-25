@@ -15,8 +15,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # open connection
         boardId = int(self.comCfg.address)
         timeout = self.dComCfg['Timeout']
-        self.dig = AlazarDig.AlazarTechDigitizer(
-            systemId=1, boardId=boardId, timeout=timeout)
+        self.dig = AlazarDig.AlazarTechDigitizer(systemId=1,
+                boardId=boardId, timeout=timeout)
         self.dig.testLED()
 
     def performClose(self, bError=False, options={}):
@@ -37,7 +37,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         quant.setValue(value)
         # don't do anything until all options are set, then set
         # complete config
-        if self.isFinalCall(options):
+        if self.isFinalCall(options) and self.isConfigUpdated(bReset=True):
             self.setConfiguration()
         return value
 
@@ -266,8 +266,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # the card
         bArm = not hardware_trig
         # get data
-        self.data = self.dig.readRecordsDMA(
-            bGetChA, bGetChB,
+        self.data = self.dig.readRecordsDMA(bGetChA, bGetChB,
             nPostSize, nRecord,
             bConfig=False, bArm=bArm, bMeasure=True,
             funcStop=self.isStopped,
