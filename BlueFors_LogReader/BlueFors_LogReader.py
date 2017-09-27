@@ -66,34 +66,36 @@ class Driver(InstrumentDriver.InstrumentWorker):
                                              '%y-%m-%d,%H:%M:%S')
         now = datetime.datetime.now()
         time_lapsed = (now - dt_time).total_seconds()
-        if time_lapsed > 300:
-            raise RuntimeWarning('The last record in %s might be '
-                                 'outdated (the record timestamp is %s.)'
-                                 % (full_filename, str_time))
+        if time_lapsed > 120:
+            return None
         return line
 
-    def _parseSimpleRecord(self, line):
+    def _parseSimpleRecord(self, line=None):
         """Parses a thermometer/flometer record.
 
         Parameters
         ----------
-        line : str
-            Single thermometer log record.
+        line : None, str, None
+            Single thermometer log record. If None (defult), the method
+            will return np.NaN.
 
         Returns
         -------
         float
             Extracted value.
         """
+        if line is None:
+            return np.NaN
         return float(line.split(b',')[-1])
 
-    def _parsePressureRecord(self, line, channel, field='status'):
+    def _parsePressureRecord(self, line=None, channel=1, field='status'):
         """Parses a pressure record.
 
         Parameters
         ----------
-        line : str
-            Single thermometer log record.
+        line : str, None
+            Single thermometer log record. If None (default), the method
+            will return np.NaN.
         channel : {1, 2, 3, 5, 6}
             Maxigauge channel number.
         field: {'status', 'pressure'}
@@ -105,6 +107,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
         float or bool
             Extracted value of the field.
         """
+        if line is None:
+            return np.NaN
         fields = line.split(b',')
         if field == 'status':
             return bool(int(fields[6 * channel - 2].decode()))
