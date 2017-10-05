@@ -1,22 +1,18 @@
-#!/usr/bin/env python
-
 import InstrumentDriver
 import LabBrick_LMS_Wrapper
 
 
 class Driver(InstrumentDriver.InstrumentWorker):
-    """ This class implements a Lab Brick generator"""
-
+    """ This class implements a Lab Brick generator."""
     def performOpen(self, options={}):
-        """Perform the operation of opening the instrument connection"""
+        """Perform the operation of opening the instrument connection."""
         self.SG = None
         # open connection
         self.SG = LabBrick_LMS_Wrapper.LabBrick_Synthesizer(bTestMode=False)
         self.SG.initDevice(self.comCfg.address.strip())
 
-
     def performClose(self, bError=False, options={}):
-        """Perform the close instrument connection operation"""
+        """Perform the close instrument connection operation."""
         # do not check for error if close was called with an error
         try:
             self.SG.closeDevice()
@@ -24,10 +20,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # never return error here
             pass
 
-        
     def performSetValue(self, quant, value, sweepRate=0.0, options={}):
-        """Perform the Set Value instrument operation. This function should
-        return the actual value set by the instrument"""
+        """Perform the Set Value instrument operation. This method
+        should return the actual value set by the instrument."""
         # start with setting current quant value
         quant.setValue(value)
         # proceed depending on command
@@ -49,7 +44,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             pulsePeriod = self.getValue('Pulse period')
             self.SG.setInternalPulseMod(pulseTime, pulsePeriod, bOn)
         return value
-
 
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation"""
@@ -74,8 +68,5 @@ class Driver(InstrumentDriver.InstrumentWorker):
         return value
 
 
-           
-
 if __name__ == '__main__':
 	pass
-

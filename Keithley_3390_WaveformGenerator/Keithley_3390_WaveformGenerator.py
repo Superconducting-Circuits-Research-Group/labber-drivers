@@ -31,12 +31,24 @@ class Driver(VISA_Driver):
             quant.setValue(value)
             self.bWaveUpdated = True
         else:
+            # there seem to be a descipancy on what voltage mean
+            if quant.name == 'Voltage':
+                value /= 2.
             # for all other cases, call VISA driver
             value = VISA_Driver.performSetValue(self, quant, value,
                     sweepRate, options=options)
+            if quant.name == 'Voltage':
+                value *= 2.
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
             self.sendWaveform()
+        return value
+
+    def performGetValue(self, quant, options={}):
+        """Perform the Get Value instrument operation"""
+        value = VISA_Driver.performGetValue(self, quant, options)
+        if quant.name == 'Voltage':
+            value *= 2.
         return value
 
     def sendWaveform(self):
