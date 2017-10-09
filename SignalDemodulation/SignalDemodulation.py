@@ -24,10 +24,15 @@ class Driver(InstrumentDriver.InstrumentWorker):
         if self.isFirstCall(options):
             # clear record buffer
             self.data = {}
-        if quant.name in ('Value', 'Value - Single shot'):
+        if quant.name in ('Value', 'Value - Single shot',
+                          'Time average'):
             if quant.name not in self.data:
                 self.getIQData()
-            return self.data[quant.name]
+            if quant.name == 'Time average':
+                return quant.getTraceDict(self.data['Time average'],
+                                          dt=self.data['dt'])
+            else:
+                return self.data[quant.name]
         elif quant.name.startswith('Value #'):
             if quant.name not in self.data:
                 index = int(quant.name[-1])
@@ -41,13 +46,18 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def getIQData(self, index=None, dFreq=None):
         """Calculate complex signal from data and reference."""
-        # get parameters
+        sTimeAverage = 'Time average'
         if index is None:
             sValue = 'Value'
             sSingleShot = 'Value - Single shot'
         else:
             sValue = 'Value #%d' % index
             sSingleShot = 'Value #%d - Single shot' % index
+        self.data[sTimeAverage] = np.NaN
+        self.data[sSingleShot] = np.NaN
+        self.data[sValue] = np.NaN
+        
+        # get parameters
         if dFreq is None:
             dFreq = self.getValue('Modulation frequency')
         skipStart = self.getValue('Skip start')
@@ -56,8 +66,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # {'y': value, 't0': t0, 'dt': dt}
         recordIn = self.getValue('Input data')
         if recordIn is None:
-            self.data[sValue] = np.NaN
-            self.data[sSingleShot] = np.NaN
             return
         vData = recordIn['y']
         nTotLength = vData.size
@@ -68,25 +76,46 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # avoid exceptions if no time step is given
         if dt == 0:
             dt = 1.0
+        self.data['dt'] = dt
+        
         skipIndex = int(round(skipStart / dt))
         length = 1 + int(round(self.getValue('Length') / dt))
         segmentLength = int(nTotLength / nSegment)
         length = min(length, segmentLength - skipIndex)
-        if length <= 1:
-            self.data[sValue] = np.NaN
-            self.data[sSingleShot] = np.NaN
+        if length < 1:
             return
+
+        bRef = bool(self.getValue('Use phase reference signal'))
+
         # define data to use, put in 2D array of segments
         vData.shape = (nSegment, segmentLength)
         # calculate cos/sin vectors, allow segmenting
-        vTime = dt * (skipIndex + np.arange(length, dtype=float))
-        vExp = np.exp(2.j * np.pi * vTime * dFreq)
+        if not hasattr(self, '_dt') or dt != self._dt or \
+                not hasattr(self, '_skipIndex') or \
+                skipIndex != self._skipIndex or \
+                not hasattr(self, '_length') or \
+                length != self._length or \
+                not hasattr(self, '_dFreq') or \
+                dFreq != self._dFreq:
+            vTime = dt * (skipIndex + np.arange(length, dtype=np.float32))
+            self._vExp = np.exp(2.j * np.pi * vTime * dFreq)
+            self._dt = dt
+            self._skipIndex = skipIndex
+            self._length = length
+            self._dFreq = dFreq
+        vExp = self._vExp
+
         # calc I/Q
-        signal = np.empty(nSegment, dtype=complex)
+        if not hasattr(self, '_nSegment') or nSegment != self._nSegment:
+            self._signal = np.empty(nSegment, dtype=np.complex64)
+            if bRef:
+                self._ref = np.empty(nSegment, dtype=np.complex64)
+            self._nSegment = nSegment
+        signal = self._signal
         np.dot(vData[:,skipIndex:skipIndex+length], vExp, signal)
-        signal /= .5 * float(length - 1)
-        bUseRef = bool(self.getValue('Use phase reference signal'))
-        if bUseRef:
+        signal /= .5 * float(length)
+
+        if bRef:
             vRef = self.getValue('Reference data')
             # skip reference if record length doesn't match
             vRef = vRef['y']
@@ -94,13 +123,26 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 raise ValueError('The data and reference record '
                         'lengths do not match.')
             vRef.shape = (nSegment, segmentLength)
-            ref = np.empty(nSegment, dtype=complex)
+            ref = self._ref
             np.dot(vRef[:,skipIndex:skipIndex+length], vExp, ref)
             # subtract the reference angle
-            signal *= np.exp(-1j * np.angle(ref))
-        self.data[sValue] = np.mean(signal)
+            expRef = np.exp(-1j * np.angle(ref))
+            signal *= expRef
+
         self.data[sSingleShot] = signal
-        return
+        self.data[sValue] = np.mean(signal)
+        
+        if bRef:
+            if not hasattr(self, '_segmentLength') or \
+                segmentLength != self._segmentLength:
+                self._timeAverage = np.empty(segmentLength, dtype=np.complex64)
+                self._segmentLength = segmentLength
+            timeAverage = self._timeAverage
+            np.dot(vData.T, np.conj(expRef), timeAverage)
+        else:
+            timeAverage = np.sum(vData, 0)
+        timeAverage /= nSegment
+        self.data[sTimeAverage] = timeAverage
 
 
 if __name__ == '__main__':

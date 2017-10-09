@@ -41,9 +41,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation."""
         # only implemented for records
-        if quant.name in ('Channel A - Averaged data',
-                          'Channel B - Averaged data',
-                          'Channel A - Flattened data',
+        if quant.name in ('Channel A - Flattened data',
                           'Channel B - Flattened data'):
             # special case for hardware looping
             if self.isHardwareLoop(options):
@@ -59,12 +57,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 else:
                     self.getRecordsSinglePort()
             # return correct data
-            try:
-                value = quant.getTraceDict(self.data[quant.name], dt=self.dt)
-            except KeyError:
-                raise KeyError("Select 'Keep all records' in the "
-                        "'Acquisition' tab to acquire "
-                        "'%s - Flattened data'." % quant.name[:9])
+            value = quant.getTraceDict(self.data[quant.name], dt=self.dt)
         else:
             # just return the quantity value
             value = quant.getValue()
@@ -121,20 +114,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # show status before starting acquisition
             self.reportStatus('Digitizer - Waiting for signal')
             # get data
-            data = self.dig.readRecordsDMA(bGetChA, bGetChB,
+            self.data = self.dig.readRecordsDMA(bGetChA, bGetChB,
                 nSample, n_seq,
                 bConfig=False, bArm=False, bMeasure=True,
                 funcStop=self.isStopped,
                 funcProgress=self._callbackProgress,
                 firstTimeout=self.dComCfg['Timeout'] + 180.0,
                 maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
-            # re-shape data and place in trace buffer
-            self.data['Channel A - Averaged data'] = \
-                data['Channel A - Averaged data'].reshape((n_seq,
-                                                           nSample))
-            self.data['Channel B - Averaged data'] = \
-                data['Channel B - Averaged data'].reshape((n_seq,
-                                                           nSample))
         # after getting data, pick values to return
         return quant.getTraceDict(self.data[quant.name], dt=self.dt)
 
@@ -251,7 +237,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
-        bGetAllRecords = bool(self.getValue('Keep all records'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
         maxBufferSize = int(self.getValue('Max buffer size'))
@@ -264,15 +249,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
             nPostSize, nRecord,
             bConfig=False, bArm=bArm, bMeasure=True,
             funcStop=self.isStopped,
-            maxBuffers=maxBuffers, maxBufferSize=maxBufferSize,
-            bGetAllRecords=bGetAllRecords)
+            maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
 
     def getRecordsSinglePort(self):
         """Resample the data."""
         # get channels in use
         bGetChA = bool(self.getValue('Channel A - Enabled'))
         bGetChB = bool(self.getValue('Channel B - Enabled'))
-        bGetAllRecords = bool(self.getValue('Keep all records'))
         nPreSize = int(self.getValue('Pre-trigger samples'))
         nPostSize = int(self.getValue('Number of samples'))
         nRecord = int(self.getValue('Number of records'))
@@ -313,19 +296,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         # read data for channels in use
         if bGetChA:
-            avgRecord, records = self.dig.readRecordsSinglePort(1,
-                    bGetAllRecords)
-            self.data['Channel A - Averaged data'] = avgRecord[start:end]
-            if records is not None:
-                self.data['Channel A - Flattened data'] = \
-                        records[:,start:end].flatten() 
+            records = self.dig.readRecordsSinglePort(1)
+            self.data['Channel A - Flattened data'] = \
+                    records[:,start:end].ravel() 
         if bGetChB:
-            avgRecord, records = self.dig.readRecordsSinglePort(2,
-                    bGetAllRecords)
-            self.data['Channel B - Averaged data'] = avgRecord[start:end]
-            if records is not None:
-                self.data['Channel B - Flattened data'] = \
-                        records[:,start:end].flatten() 
+            records = self.dig.readRecordsSinglePort(2)
+            self.data['Channel B - Flattened data'] = \
+                    records[:,start:end].ravel() 
 
 
 if __name__ == '__main__':
