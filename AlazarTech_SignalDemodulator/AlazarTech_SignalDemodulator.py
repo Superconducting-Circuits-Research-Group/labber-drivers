@@ -43,32 +43,51 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # only implemented for records
         if quant.name in ('Channel A - Flattened data',
                           'Channel B - Flattened data',
-                          'Time average',
-                          'Value - Single shot',
-                          'Value'):
+                          'Value', 'Time average', 'Single shot values'):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 return self.getSignalHardwareLoop(quant, options)
             # check if first call, if so get new records
             if self.isFirstCall(options):
                 # clear trace buffer
-                self.data = {}
                 # read records
+                self.data = {}
+                import time
+                t0 = time.clock()
                 if self.getValue('NPT AsyncDMA Enabled'):
                     self.getRecordsDMA(
                         hardware_trig=self.isHardwareTrig(options))
                 else:
                     self.getRecordsSinglePort()
+                # cash demodulation parameters
+                self.log('A: %f sec' % (time.clock() - t0))
+                t0 = time.clock()
+                self.cashDemodulationParameters()
+                self.log('B: %f sec' % (time.clock() - t0))
+                t0 = time.clock()
             # return correct data
-            if quant.name not in self.data:
-                self.getIQData()
             if quant.name in ('Channel A - Flattened data',
-                              'Channel B - Flattened data',
-                              'Time average'):
-                return quant.getTraceDict(self.data[quant.name],
+                              'Channel B - Flattened data'):
+                flattened = self.dig.data[quant.name[:9]].ravel()
+                return quant.getTraceDict(flattened, dt=self.dt)
+            elif quant.name == 'Value':
+                if 'Value' not in self.data:
+                    self.getDemodValue()
+                self.log('C: %f sec' % (time.clock() - t0))
+                return self.data['Value']
+            elif quant.name == 'Time average':
+                if 'Time average' not in self.data:
+                    self.getTimeAverage()
+                return quant.getTraceDict(self.data['Time average'],
                                           dt=self.dt)
+            elif quant.name == 'Single shot values':
+                if 'Single shot values' not in self.data:
+                    self.getSingleShotValues()
+                return quant.getTraceDict(self.data['Single shot values'],
+                                          dt=1)
             else:
-                return self.data[quant.name]
+                raise KeyError("Unknown output data type: '%s'."
+                               % quant.name)
         else:
             # just return the quantity value
             return quant.getValue()
@@ -307,93 +326,106 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # read data for channels in use
         if bGetChA:
             records = self.dig.readRecordsSinglePort(1)
-            self.data['Channel A - Flattened data'] = \
-                    records[:,start:end]
+            self.data['Channel A'] = records[:,start:end]
         if bGetChB:
             records = self.dig.readRecordsSinglePort(2)
-            self.data['Channel B - Flattened data'] = \
-                    records[:,start:end] 
+            self.data['Channel B'] = records[:,start:end]
 
-    def getIQData(self):
-        """Calculate complex signal from data and reference."""
-        sTimeAverage = 'Time average'
-        sValue = 'Value'
-        sSingleShot = 'Value - Single shot'
-
-        self.data[sTimeAverage] = np.NaN
-        self.data[sSingleShot] = np.NaN
-        self.data[sValue] = np.NaN
-        
+    def cashDemodulationParameters(self):
+        """Cash parameters that are used for calculating output values."""
         # get parameters
         dFreq = self.getValue('Demodulation frequency')
         skipStart = self.getValue('Skip start')
         nSegment = int(self.getValue('Number of records'))
         # get input data from dictionary, dictionary format:
         # {'y': value, 't0': t0, 'dt': dt}
-        vData = self.data['Channel A - Flattened data']
+        try:
+            vData = self.data['Channel A']
+        except KeyError:
+            raise KeyError("Select 'Channel A - Enabled' to "
+                    "acquire the data.")
         nTotLength = vData.size
         dt = self.dt
-        skipIndex = int(round(skipStart / dt))
+        skip = int(round(skipStart / dt))
         length = 1 + int(round(self.getValue('Demodulation length') / dt))
         segmentLength = int(nTotLength / nSegment)
-        length = min(length, segmentLength - skipIndex)
+        length = min(length, segmentLength - skip)
         if length < 1:
-            return
+            raise Exception('Nothing to demodulate: increase '
+                    'the demodulation or record length.')
 
-        bRef = bool(self.getValue('Use channel B as reference signal'))
+        self._bRef = bool(self.getValue('Use channel B as reference signal'))
 
+        if not hasattr(self, '_firstRun'):
+            self._firstRun = True
         # calculate cos/sin vectors, allow segmenting
-        if not hasattr(self, '_dt') or dt != self._dt or \
-                not hasattr(self, '_skipIndex') or \
-                skipIndex != self._skipIndex or \
-                not hasattr(self, '_length') or \
+        if self._firstRun or dt != self._dt or \
+                skip != self._skip or \
                 length != self._length or \
-                not hasattr(self, '_dFreq') or \
                 dFreq != self._dFreq:
-            vTime = dt * (skipIndex + np.arange(length, dtype=np.float32))
-            self._vExp = np.exp(2.j * np.pi * vTime * dFreq)
+            vTime = dt * (skip + np.arange(length, dtype=float))
+            vExp = np.exp(2.j * np.pi * vTime * dFreq)
+            self._vExp = vExp.astype(dtype=complex)
             self._dt = dt
-            self._skipIndex = skipIndex
+            self._skip = skip
             self._length = length
             self._dFreq = dFreq
-        vExp = self._vExp
-
-        # calc I/Q
-        if not hasattr(self, '_nSegment') or nSegment != self._nSegment:
-            self._signal = np.empty(nSegment, dtype=np.complex64)
-            if bRef:
-                self._ref = np.empty(nSegment, dtype=np.complex64)
+        
+        if self._firstRun or self._nSegment != nSegment:
             self._nSegment = nSegment
-        signal = self._signal
-        np.dot(vData[:,skipIndex:skipIndex+length], vExp, signal)
-        signal /= .5 * float(length)
 
-        if bRef:
+        # allocate memory
+        if self._bRef:
             try:
-                vRef = self.data['Channel B - Flattened data']
+                vRef = self.data['Channel B']
             except KeyError:
                 raise KeyError("Select 'Channel B - Enabled' to "
                         "acquire the reference data.")
-            ref = self._ref
-            np.dot(vRef[:,skipIndex:skipIndex+length], vExp, ref)
-            # subtract the reference angle
-            expRef = np.exp(-1j * np.angle(ref))
-            signal *= expRef
+            ref = np.dot(vRef[:,skip:skip+length], self._vExp)
+            self._vExpRef = np.exp(-1.j * np.angle(ref))
 
-        self.data[sSingleShot] = signal
-        self.data[sValue] = np.mean(signal)
-        
-        if bRef:
-            if not hasattr(self, '_segmentLength') or \
-                segmentLength != self._segmentLength:
-                self._timeAverage = np.empty(segmentLength, dtype=np.complex64)
-                self._segmentLength = segmentLength
-            timeAverage = self._timeAverage
-            np.dot(vData.T, np.conj(expRef), timeAverage)
+        self._firstRun = False
+
+    def getTimeAverage(self):
+        """Calculate time average from data and reference."""
+        if self._bRef:
+            timeAverage = np.dot(self.data['Channel A'].T, self._vExpRef)
         else:
-            timeAverage = np.sum(vData, 0)
-        timeAverage /= nSegment
-        self.data[sTimeAverage] = timeAverage
+            timeAverage = np.sum(self.data['Channel A'], axis=0)
+        timeAverage /= self._nSegment
+        self.data['Time average'] = timeAverage
+        
+    def getDemodValue(self):
+        """Calculate complex signal aveage value from data and reference."""
+        skip = self._skip
+        length = self._length
+        if 'Time average' not in self.data:
+            chA = self.data['Channel A'][:,skip:skip+length]
+            if self._bRef:
+                timeAverage = np.dot(chA.T, self._vExpRef)
+            else:
+                timeAverage = np.sum(chA, axis=0)
+            timeAverage /= self._nSegment
+        else:
+            timeAverage = self.data['Time average'][skip:skip+length]
+        value = np.dot(timeAverage, self._vExp)
+        self.data['Value'] = value / (.5 * float(length))
+        
+    def getSingleShotValues(self):
+        """Calculate complex signal vector from data and reference."""
+        skip = self._skip
+        length = self._length
+        vData = self.data['Channel A'][:,skip:skip+length]
+        singleShot = np.dot(vData, self._vExp)
+        singleShot /= .5 * float(length)
+
+        if self._bRef:
+            # subtract the reference angle
+            singleShot *= self._vExpRef
+
+        self.data['Single shot values'] = singleShot
+        self.data['Value'] = np.mean(singleShot)
+
 
 if __name__ == '__main__':
     pass

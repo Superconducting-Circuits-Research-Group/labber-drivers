@@ -368,7 +368,7 @@ class AlazarTechDigitizer():
                 self.AlazarAbortAsyncRead()
             except BaseException:
                 pass
-
+        t0 = time.clock()
         recordsView = records.view()
         recordsView.shape = (buffersPerAcquisition, numberOfChannels,
                             recordsPerBuffer, samplesPerRecord)
@@ -376,20 +376,20 @@ class AlazarTechDigitizer():
                 1, 0).reshape(numberOfChannels, nRecord, samplesPerRecord)
         if samplesPerRecord != nSamples:
             recordsView = recordsView[:,:,:nSamples]
-
-        recordsFloat = recordsView.astype(dtype=np.float32)
+        recordsFloat = recordsView.astype(dtype=np.float32, copy=False)
         recordsFloat -= self.codeZero
         if numberOfChannels == 2:
             recordsFloat[0] *= rangeA
             recordsFloat[1] *= rangeB
-            data['Channel A - Flattened data'] = recordsFloat[0]
-            data['Channel B - Flattened data'] = recordsFloat[1]
+            data['Channel A'] = recordsFloat[0]
+            data['Channel B'] = recordsFloat[1]
         elif bGetChA:
             records *= rangeA
-            data['Channel A - Flattened data'] = recordsFloat[0]
+            data['Channel A'] = recordsFloat[0]
         else:
             records *= rangeB
-            data['Channel B - Flattened data'] = recordsFloat[1]
+            data['Channel B'] = recordsFloat[1]
+        log.info('H: %f sec' % (time.clock() - t0))
         return data
 
     def removeBuffersDMA(self):

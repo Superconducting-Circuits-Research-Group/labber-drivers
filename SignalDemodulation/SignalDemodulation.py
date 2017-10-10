@@ -138,7 +138,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 self._timeAverage = np.empty(segmentLength, dtype=np.complex64)
                 self._segmentLength = segmentLength
             timeAverage = self._timeAverage
-            np.dot(vData.T, np.conj(expRef), timeAverage)
+            np.dot(vData.T, expRef, timeAverage)
         else:
             timeAverage = np.sum(vData, 0)
         timeAverage /= nSegment
