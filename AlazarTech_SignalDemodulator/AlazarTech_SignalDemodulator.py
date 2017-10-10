@@ -52,19 +52,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 # clear trace buffer
                 # read records
                 self.data = {}
-                import time
-                t0 = time.clock()
                 if self.getValue('NPT AsyncDMA Enabled'):
                     self.getRecordsDMA(
                         hardware_trig=self.isHardwareTrig(options))
                 else:
                     self.getRecordsSinglePort()
                 # cash demodulation parameters
-                self.log('A: %f sec' % (time.clock() - t0))
-                t0 = time.clock()
                 self.cashDemodulationParameters()
-                self.log('B: %f sec' % (time.clock() - t0))
-                t0 = time.clock()
             # return correct data
             if quant.name in ('Channel A - Flattened data',
                               'Channel B - Flattened data'):
@@ -73,7 +67,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             elif quant.name == 'Value':
                 if 'Value' not in self.data:
                     self.getDemodValue()
-                self.log('C: %f sec' % (time.clock() - t0))
                 return self.data['Value']
             elif quant.name == 'Time average':
                 if 'Time average' not in self.data:

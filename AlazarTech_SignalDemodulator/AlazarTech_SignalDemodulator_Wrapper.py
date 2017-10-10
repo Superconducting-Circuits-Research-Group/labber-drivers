@@ -1,16 +1,14 @@
-import os
 import time
 import numpy as np
 import ctypes
-
-from atsapi import *
-from ctypes import (c_int, c_int32, c_uint8, c_uint16, c_uint32, 
-                    c_float, c_char_p, c_void_p, c_long, byref)
+from ctypes import (c_int, c_uint8, c_uint16, 
+                    c_char_p, c_void_p, c_long, byref)
 
 # add logger, to allow logging to Labber's instrument log
 import logging
 log = logging.getLogger('LabberDriver')
 
+from atsapi import *
 
 class AlazarTechDigitizer():
     """Represents the AlazarTech digitizer, redefines the DLL functions
@@ -336,10 +334,10 @@ class AlazarTechDigitizer():
         buffersCompleted = 0
         timeout_ms = int(1000. * firstTimeout)
         try:
-            while (buffersCompleted < buffersPerAcquisition):
+            while buffersCompleted < buffersPerAcquisition:
                 # wait for the buffer at the head of the list of
                 # available buffers to be filled by the board
-                buf = self.buffers[buffersCompleted % len(self.buffers)]
+                buf = self.buffers[buffersCompleted % bufferCount]
                 self.AlazarWaitAsyncBufferComplete(buf.addr,
                                                    timeout_ms=timeout_ms)
 
@@ -368,7 +366,7 @@ class AlazarTechDigitizer():
                 self.AlazarAbortAsyncRead()
             except BaseException:
                 pass
-        t0 = time.clock()
+
         recordsView = records.view()
         recordsView.shape = (buffersPerAcquisition, numberOfChannels,
                             recordsPerBuffer, samplesPerRecord)
@@ -376,7 +374,7 @@ class AlazarTechDigitizer():
                 1, 0).reshape(numberOfChannels, nRecord, samplesPerRecord)
         if samplesPerRecord != nSamples:
             recordsView = recordsView[:,:,:nSamples]
-        recordsFloat = recordsView.astype(dtype=np.float32, copy=False)
+        recordsFloat = recordsView.astype(dtype=np.float32)
         recordsFloat -= self.codeZero
         if numberOfChannels == 2:
             recordsFloat[0] *= rangeA
@@ -389,7 +387,7 @@ class AlazarTechDigitizer():
         else:
             records *= rangeB
             data['Channel B'] = recordsFloat[1]
-        log.info('H: %f sec' % (time.clock() - t0))
+
         return data
 
     def removeBuffersDMA(self):
