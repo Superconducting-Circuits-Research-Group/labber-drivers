@@ -66,7 +66,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 return quant.getTraceDict(flattened, dt=self.dt)
             elif quant.name == 'Value':
                 if 'Value' not in self.data:
-                    self.getDemodValue()
+                    self.getSingleShotValues()
                 return self.data['Value']
             elif quant.name == 'Time average':
                 if 'Time average' not in self.data:
@@ -356,9 +356,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 skip != self._skip or \
                 length != self._length or \
                 dFreq != self._dFreq:
-            vTime = dt * (skip + np.arange(length, dtype=float))
+            vTime = dt * (skip + np.arange(length, dtype=np.float32))
             vExp = np.exp(2.j * np.pi * vTime * dFreq)
-            self._vExp = vExp.astype(dtype=complex)
+            self._vExp = vExp.view('complex64')
             self._dt = dt
             self._skip = skip
             self._length = length
@@ -410,7 +410,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         length = self._length
         vData = self.data['Channel A'][:,skip:skip+length]
         singleShot = np.dot(vData, self._vExp)
-        singleShot /= .5 * float(length)
+        singleShot /= .5 * np.float32(length)
 
         if self._bRef:
             # subtract the reference angle
