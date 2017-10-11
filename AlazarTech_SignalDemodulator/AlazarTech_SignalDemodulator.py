@@ -62,7 +62,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # return correct data
             if quant.name in ('Channel A - Flattened data',
                               'Channel B - Flattened data'):
-                flattened = self.dig.data[quant.name[:9]].ravel()
+                flattened = self.data[quant.name[:9]].ravel()
                 return quant.getTraceDict(flattened, dt=self.dt)
             elif quant.name == 'Value':
                 if 'Value' not in self.data:
