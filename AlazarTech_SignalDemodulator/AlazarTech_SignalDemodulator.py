@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 import InstrumentDriver
 import AlazarTech_SignalDemodulator_Wrapper as AlazarDig
@@ -178,8 +179,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
                      500E3, 1E6, 2E6, 5E6, 10E6, 20E6, 50E6, 100E6,
                      250E6, 500E6, 1E9]
             Decimation = int(1E9 / lFreq[sampleRateIndex])
-        self.dig.AlazarSetCaptureClock(SourceId, SampleRateId, 0,
-                                       Decimation)
+        try:
+            self.dig.AlazarSetCaptureClock(SourceId, SampleRateId, 0,
+                                           Decimation)
+        except:
+            self.log("'ApiPllNotLocked' has been thrown.")
+            time.sleep(.1)
+            self.dig.AlazarSetCaptureClock(SourceId, SampleRateId, 0,
+                                           Decimation)
         # define time step from sample rate
         self.dt = 1.0 / lFreq[sampleRateIndex]
         # configure inputs

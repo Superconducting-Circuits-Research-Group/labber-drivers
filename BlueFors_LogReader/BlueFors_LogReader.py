@@ -189,3 +189,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             return self._parseSimpleRecord(line) / 1e3
         else:
             return quant.getValue()
+
+
+if __name__ == '__main__':
+    pass

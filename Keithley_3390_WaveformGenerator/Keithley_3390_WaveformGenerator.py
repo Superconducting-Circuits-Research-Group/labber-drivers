@@ -66,9 +66,12 @@ class Driver(VISA_Driver):
         sLen = b'%d' % (2 * length)
         sHead = b':DATA:DAC VOLATILE, #%d%s' % (len(sLen), sLen)
         # write header + data
+        trigger = self.readValueFromOther('Trigger source')
+        self.sendValueToOther('Trigger source', 'Manual')
         self.write_raw(sHead + vI16.tobytes())
         # select volatile waveform
         self.write(':FUNC:USER VOLATILE')
+        self.sendValueToOther('Trigger source', trigger)
 
 
 if __name__ == '__main__':
