@@ -10,6 +10,7 @@ log = logging.getLogger('LabberDriver')
 
 from atsapi import *
 
+
 class AlazarTechDigitizer():
     """Represents the AlazarTech digitizer, redefines the DLL functions
     in Python.
@@ -39,6 +40,7 @@ class AlazarTechDigitizer():
         # range and zero for conversion to voltages
         self.codeZero = float(1 << (bitsPerSample - 1)) - .5
         self.codeRange = float(1 << (bitsPerSample - 1)) - .5
+        self.numberOfChannels = 2
 
     def testLED(self):
         self.callFunc('AlazarSetLED', self.handle, U32(1))
@@ -63,7 +65,7 @@ class AlazarTechDigitizer():
 
     def getError(self, status):
         """Convert the error in status to a string."""
-        func = getattr(DLL, 'AlazarErrorToText')
+        func = getattr(ats, 'AlazarErrorToText')
         func.restype = c_char_p
         # const char* AlazarErrorToText(RETURN_CODE retCode)
         errorText = func(c_int(status))
@@ -187,22 +189,15 @@ class AlazarTechDigitizer():
         self.callFunc('AlazarWaitAsyncBufferComplete', self.handle,
                       buffer, timeout_ms)
 
-    def readRecordsDMA(self, bGetChA, bGetChB,
-                      nSamples, nRecord,
-                      bConfig=True, bArm=True, bMeasure=True,
-                      funcStop=None, funcProgress=None,
-                      timeout=None, firstTimeout=None,
-                      maxBuffers=8, maxBufferSize=(2**26)):
+    def readRecordsDMA(self, mode, nSamples, nRecord,
+                bConfig=True, bArm=True, bMeasure=True,
+                funcStop=None, funcProgress=None,
+                timeout=None, firstTimeout=None,
+                maxBuffers=8, maxBufferSize=(2**26)):
         """Reads records in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
-        # select the active channels
-        channels = int(bGetChA) | int(bGetChB) << 1
-        numberOfChannels = int(bGetChA) + int(bGetChB)
-
         data = {}
-        if numberOfChannels == 0:
-            return data
         
         # use global timeout if not given
         timeout = self.timeout if timeout is None else timeout
@@ -213,10 +208,9 @@ class AlazarTechDigitizer():
         samplesPerRecord = 64 * ((nSamples + 63) // 64)
 
         # compute the number of bytes per record and per buffer
-        bytesPerSample = self.bytesPerSample
-        bytesPerRecord = bytesPerSample * samplesPerRecord
+        bytesPerRecord = self.bytesPerSample * samplesPerRecord
 
-        if numberOfChannels * bytesPerRecord > maxBufferSize:
+        if self.numberOfChannels * bytesPerRecord > maxBufferSize:
             raise MemoryError('Maximum allowed buffer size '
                     'is too small to contain even a single record.')
 
@@ -225,7 +219,7 @@ class AlazarTechDigitizer():
         nResidual = nRecord
         consistencyFlag = False
         while not consistencyFlag:
-            bytesPerBuffer = int(numberOfChannels * recordsPerBuffer *
+            bytesPerBuffer = int(self.numberOfChannels * recordsPerBuffer *
                                  bytesPerRecord)
             if bytesPerBuffer > maxBufferSize:
                 noFactorFlag = True
@@ -251,8 +245,13 @@ class AlazarTechDigitizer():
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
                               maxBuffers))
+                              
+        if mode.startswith('Average') or mode.startswith('Referenced Average'):
+            mode = 'average'
+        else:
+            mode = 'individual'
 
-        # configure board, if wanted
+        # configure board
         if not hasattr(self, '_samplesPerRecord') or \
                 samplesPerRecord != self._samplesPerRecord:
             bConfig = True
@@ -268,6 +267,7 @@ class AlazarTechDigitizer():
                 bufferCount != self._bufferCount:
             bConfig = True
             self._bufferCount = bufferCount
+
         if bConfig:
             log.info('Buffers per acquisition: %d' % buffersPerAcquisition)
             log.info('Requested number of buffers: %d' % bufferCount)
@@ -276,7 +276,7 @@ class AlazarTechDigitizer():
             self.AlazarSetRecordSize(0, samplesPerRecord)
             self.AlazarSetRecordCount(nRecord)
             # allocate DMA buffers
-            if bytesPerSample > 1:
+            if self.bytesPerSample > 1:
                 sample_type = ctypes.c_uint16
             else:
                 sample_type = ctypes.c_uint8
@@ -287,42 +287,30 @@ class AlazarTechDigitizer():
             for i in range(bufferCount):
                 self.buffers.append(DMABuffer(sample_type,
                                               bytesPerBuffer))
+            # initialize data arrays
+            if mode == 'individual':
+                samples = self.numberOfChannels * nRecord * samplesPerRecord
+                if self.bytesPerSample == 1:
+                    self._records = np.empty(samples, dtype=np.uint8)
+                elif self.bytesPerSample == 2:
+                    self._records = np.empty(samples, dtype=np.uint16)
+                else:
+                    self._records = np.empty(samples, dtype=np.uint32)
 
-        # initialize data arrays
-        bufferSize = recordsPerBuffer * numberOfChannels * samplesPerRecord
-        samples = buffersPerAcquisition * bufferSize
-        if not hasattr(self, '_bufferSize') or \
-                bufferSize != self._bufferSize or \
-                not hasattr(self, '_samples') or \
-                samples != self._samples:
-            if bytesPerSample == 1:
-                self._records = np.empty(samples, dtype=np.uint8)
-            elif bytesPerSample == 2:
-                self._records = np.empty(samples, dtype=np.uint16)
-            else:
-                self._records = np.empty(samples, dtype=np.uint32)
-            self._bufferSize = bufferSize
-            self._samples = samples
-        records = self._records
-
-        # range and zero for each channel, combined with bit shifting
-        rangeA = self.dRange[1] / self.codeRange
-        rangeB = self.dRange[2] / self.codeRange
-        
         # arm and start capture, if wanted
         if bArm:
-            # configure the board to make an NPT AutoDMA acquisition
-            self.AlazarBeforeAsyncRead(channels, 0,
-                                       samplesPerRecord,
-                                       recordsPerBuffer,
-                                       nRecord,
-                                       ADMA_EXTERNAL_STARTCAPTURE | ADMA_NPT)
-            # post DMA buffers to board
+            # Configure the board to make a Traditional AutoDMA acquisition
+            self.AlazarBeforeAsyncRead(3, 0,
+                    samplesPerRecord,
+                    recordsPerBuffer,
+                    nRecord,
+                    ADMA_EXTERNAL_STARTCAPTURE | ADMA_NPT)
+            # Post DMA buffers to board
             for buf in self.buffers:
                 self.AlazarPostAsyncBuffer(buf.addr, buf.size_bytes)
             try:
                 self.AlazarStartCapture()
-            except BaseException:
+            except:
                 # make sure buffers release memory if failed
                 self.removeBuffersDMA()
                 raise
@@ -331,8 +319,19 @@ class AlazarTechDigitizer():
         if not bMeasure:
             return
 
+        samplesPerBuffer = self.numberOfChannels * recordsPerBuffer * samplesPerRecord
+        if mode == 'average':
+            avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint32)
+        else:
+            records = self._records
+
+        # range and zero for each channel, combined with bit shifting
+        rangeA = self.dRange[1] / self.codeRange
+        rangeB = self.dRange[2] / self.codeRange
+
         buffersCompleted = 0
         timeout_ms = int(1000. * firstTimeout)
+        t0 = time.clock()
         try:
             while buffersCompleted < buffersPerAcquisition:
                 # wait for the buffer at the head of the list of
@@ -341,9 +340,12 @@ class AlazarTechDigitizer():
                 self.AlazarWaitAsyncBufferComplete(buf.addr,
                                                    timeout_ms=timeout_ms)
 
-                bufferPosition = bufferSize * buffersCompleted
-                records[bufferPosition:bufferPosition + bufferSize] = \
-                    buf.buffer
+                if mode == 'average':
+                    avgRecord += buf.buffer
+                else:
+                    bufferPosition = samplesPerBuffer * buffersCompleted
+                    records[bufferPosition:bufferPosition+samplesPerBuffer] = \
+                        buf.buffer
 
                 # add the buffer to the end of the list of available
                 # buffers
@@ -362,31 +364,39 @@ class AlazarTechDigitizer():
                                  float(buffersPerAcquisition))
         finally:
             # release resources
-            try:
-                self.AlazarAbortAsyncRead()
-            except BaseException:
-                pass
+            self.AlazarAbortAsyncRead()
+        
+        log.info('Data acquisition: %.6f s.' %(time.clock() - t0))
+        t0 = time.clock()
 
-        recordsView = records.view()
-        recordsView.shape = (buffersPerAcquisition, numberOfChannels,
-                            recordsPerBuffer, samplesPerRecord)
-        recordsView = np.rollaxis(recordsView,
-                1, 0).reshape(numberOfChannels, nRecord, samplesPerRecord)
-        if samplesPerRecord != nSamples:
-            recordsView = recordsView[:,:,:nSamples]
-        recordsFloat = recordsView.astype(dtype=np.float32)
-        recordsFloat -= self.codeZero
-        if numberOfChannels == 2:
+        if mode == 'average':
+            avgRecord.shape = (self.numberOfChannels,
+                    recordsPerBuffer, samplesPerRecord)
+            avgRecord = np.sum(avgRecord, axis=1)
+            avgRecordFloat = np.asfarray(avgRecord, dtype=np.float32)
+            avgRecordFloat /= nRecord
+            avgRecordFloat -= self.codeZero
+            avgRecordFloat[0] *= rangeA
+            avgRecordFloat[1] *= rangeB
+            data['Channel A - Average record'] = avgRecordFloat[0]
+            data['Channel B - Average record'] = avgRecordFloat[1]
+        else:
+            recordsView = records.view()
+            recordsView.shape = (buffersPerAcquisition, self.numberOfChannels,
+                                recordsPerBuffer, samplesPerRecord)
+            recordsView = np.rollaxis(recordsView,
+                    1, 0).reshape(self.numberOfChannels, nRecord, samplesPerRecord)
+            if samplesPerRecord != nSamples:
+                recordsView = recordsView[:,:,:nSamples]
+            recordsFloat = recordsView.astype(dtype=np.float32)
+            recordsFloat -= self.codeZero
+
             recordsFloat[0] *= rangeA
             recordsFloat[1] *= rangeB
             data['Channel A'] = recordsFloat[0]
             data['Channel B'] = recordsFloat[1]
-        elif bGetChA:
-            records *= rangeA
-            data['Channel A'] = recordsFloat[0]
-        else:
-            records *= rangeB
-            data['Channel B'] = recordsFloat[1]
+            
+        log.info('Pre-processing: %.6f s.' %(time.clock() - t0))
 
         return data
 
@@ -399,18 +409,17 @@ class AlazarTechDigitizer():
         self.buffers = []
 
     def readRecordsSinglePort(self, Channel):
-        """Reads records, converts to float, averages to a single trace."""
+        """Reads records, converts to float."""
         # define sizes
-        bytesPerSample = self.bytesPerSample
         samplesPerRecord = self.nPreSize + self.nPostSize
         dataBuffer = (c_uint8 * samplesPerRecord)()
         # define scale factors
         voltScale = self.dRange[Channel] / self.codeRange
         # initialize a scaled float vector
-        records = np.empty((self.nRecord, samplesPerRecord), dtype=float)
+        records = np.empty((self.nRecord, samplesPerRecord), dtype=np.float32)
         for n in range(self.nRecord):
-            self.AlazarRead(Channel, dataBuffer, bytesPerSample, n + 1,
-                            -self.nPreSize, samplesPerRecord)
+            self.AlazarRead(Channel, dataBuffer, self.bytesPerSample,
+                            n+1, -self.nPreSize, samplesPerRecord)
             # convert and scale to float
             records[n] = np.array(dataBuffer, dtype=np.float32)
         records -= self.codeZero
