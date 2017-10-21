@@ -54,7 +54,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 self.getSignalHardwareLoop(quant, options)
-                return self.getData(mode, quant.name)
+                return self.getData(mode, quant)
             
             # check if first call, if so get new records
             if self.isFirstCall(options):
@@ -73,14 +73,12 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 self._bRef = False
 
             # cash demodulation parameters
-            if mode not in ('Raw', 'Average Record') and \
-                    (mode.startswith('Individual') or \
-                     mode.startswith('Referenced Individual')):
+            if mode.startswith('Individual') or \
+                    mode.startswith('Referenced Individual'):
                 self.cashDemodulationParametersForIndividual()
 
             # return correct data
-            return self.getData(mode, quant.name)
-
+            return self.getData(mode, quant)
         else:
             # just return the quantity value
             return quant.getValue()
@@ -316,9 +314,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
             raise NotImplementedError("Output data '%s' could not be "
                     "acquired in acquisition mode '%s'." % (name, mode))
 
-    def getData(self, mode, name):
+    def getData(self, mode, quant):
         """Return data that corresponds to the seleted data acquisition
         mode."""
+        name = quant.name
         if mode == 'Raw':
             if name in ('Channel A - Records',
                         'Channel B - Records'):

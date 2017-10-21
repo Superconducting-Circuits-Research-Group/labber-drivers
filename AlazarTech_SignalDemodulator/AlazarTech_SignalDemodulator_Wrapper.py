@@ -321,7 +321,10 @@ class AlazarTechDigitizer():
 
         samplesPerBuffer = self.numberOfChannels * recordsPerBuffer * samplesPerRecord
         if mode == 'average':
-            avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint32)
+            if self.bytesPerSample == 1:
+                avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint32)
+            else:
+                avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint64)
         else:
             records = self._records
 
@@ -373,6 +376,8 @@ class AlazarTechDigitizer():
             avgRecord.shape = (self.numberOfChannels,
                     recordsPerBuffer, samplesPerRecord)
             avgRecord = np.sum(avgRecord, axis=1)
+            if samplesPerRecord != nSamples:
+                avgRecord = avgRecord[:,:nSamples]
             avgRecordFloat = np.asfarray(avgRecord, dtype=np.float32)
             avgRecordFloat /= nRecord
             avgRecordFloat -= self.codeZero
