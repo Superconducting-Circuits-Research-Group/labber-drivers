@@ -122,7 +122,7 @@ class LabBrick_Synthesizer():
         if iSerial not in lSerial:
             # Raise error if device is not found.
             sErr = ('Device with serial number "%d" cannot be found.'
-                    '\n\nDevices detected:\n' %iSerial)
+                    '\n\nDevices detected:\n' % iSerial)
             for dDev in lDev:
                 sErr += ('Name: %s, Serial: %d\n' %
                          (dDev['name'], dDev['serial']))

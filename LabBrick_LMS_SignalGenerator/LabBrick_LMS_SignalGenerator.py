@@ -33,8 +33,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.SG.setPowerLevel(value)
         elif quant.name == 'Output':
             self.SG.setRFOn(bool(value))
-        elif quant.name == 'Use internal reference':
-            self.SG.setUseInternalRef(bool(value))
+        elif quant.name == 'External reference':
+            self.SG.setUseInternalRef(not bool(value))
         elif quant.name == 'External pulse modulation':
             self.SG.setExternalPulseMod(bool(value))
         elif quant.name in ('Internal pulse modulation', 'Pulse time', 'Pulse period'):
@@ -54,8 +54,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             value = self.SG.getPowerLevel()
         elif quant.name == 'Output':
             value = self.SG.getRFOn()
-        elif quant.name == 'Use internal reference':
-            value = self.SG.getUseInternalRef()
+        elif quant.name == 'External reference':
+            value = not self.SG.getUseInternalRef()
         elif quant.name == 'Internal pulse modulation':
             value = self.SG.getInternalPulseMod()
         elif quant.name == 'Pulse time':
