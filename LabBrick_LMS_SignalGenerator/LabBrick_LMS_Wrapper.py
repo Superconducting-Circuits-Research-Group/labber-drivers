@@ -233,8 +233,8 @@ class LabBrick_Synthesizer():
         BAD_HID_IO = 0x80020000
         DEVICE_NOT_READY = 0x80030000
         dError = {
-                BAD_PARAMETER: ('Out of range input - frequency outside'
-                                ' min/max etc.'),
+                BAD_PARAMETER: ('Out of range input: frequency or power'
+                                ' outside the range.'),
                 BAD_HID_IO: ('A failure occurred internally during I/O'
                              ' to the device.'),
                 DEVICE_NOT_READY: 'Device is not open or has no handle.'}
