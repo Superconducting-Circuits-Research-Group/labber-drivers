@@ -50,7 +50,9 @@ class Driver(InstrumentDriver.InstrumentWorker):
                           'Channel A - Demodulated values',
                           'Channel B - Demodulated values',
                           'Channel A - Average demodulated value',
-                          'Channel B - Average demodulated value'):
+                          'Channel B - Average demodulated value',
+                          'Channel A - Average piecewise demodulated values',
+                          'Channel B - Average piecewise demodulated values'):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 self.getSignalHardwareLoop(quant, options)
@@ -326,25 +328,16 @@ class Driver(InstrumentDriver.InstrumentWorker):
             else:
                 raise self._raiseError(name, mode)
                 
-        elif mode == 'Average Record':
-            if name in ('Channel A - Average record',
-                        'Channel B - Average record'):
-                if name in self.data:
-                    return quant.getTraceDict(self.data[name],
-                                              dt=self.dt)
-                raise self._raiseError(name, mode)
-                
         elif mode == 'Individual Record Demodulation':
             if name in ('Channel A - Records',
                         'Channel B - Records'):
                 flattened = self.data[name[:9]].ravel()
                 return quant.getTraceDict(flattened, dt=self.dt)
             elif name in ('Channel A - Demodulated values',
-                                'Channel B - Demodulated values'):
+                          'Channel B - Demodulated values'):
                 if name not in self.data:
                     self.getDemodulatedValuesFromIndividual()
-                return quant.getTraceDict(self.data[name],
-                                          dt=1)
+                return quant.getTraceDict(self.data[name], dt=1)
             elif name in ('Channel A - Average demodulated value',
                           'Channel B - Average demodulated value'):
                 if name not in self.data:
@@ -356,11 +349,23 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     self._tcycle = time.clock()
                 return self.data[name]
             elif name in ('Channel A - Average record',
-                                'Channel B - Average record'):
+                          'Channel B - Average record'):
                 if name not in self.data:
                     self.getAverageRecordFromIndiviual()
-                return quant.getTraceDict(self.data[name],
-                                          dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self.dt)
+            elif name in ('Channel A - Average piecewise demodulated values',
+                          'Channel B - Average piecewise demodulated values'):
+                t0 = time.clock()
+                if name not in self.data:
+                    if ('%s - Average record' % name[:9]) not in self.data:
+                        self.getAverageRecordFromIndiviual() 
+                    self.getPiecewiseDemodulatedValuesFromAverage()
+                dt = self.getValue('Demodulation length')
+                self.log('Data processing %.6f s.' % (time.clock() - t0))
+                if hasattr(self, '_tcycle'):
+                    self.log('Total time %.6f s.' % (time.clock() - self._tcycle))
+                self._tcycle = time.clock()
+                return quant.getTraceDict(self.data[name], dt=dt)
             else:
                 raise self._raiseError(name, mode)
                 
@@ -382,8 +387,19 @@ class Driver(InstrumentDriver.InstrumentWorker):
             elif name == 'Channel A - Average record':
                 if name not in self.data:
                     self.getAverageRecordFromIndiviual()
-                return quant.getTraceDict(self.data[name],
-                                          dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self.dt)
+            elif name == 'Channel A - Average piecewise demodulated values':
+                t0 = time.clock()
+                if name not in self.data:
+                    if 'Channel A - Average record' not in self.data:
+                        self.getAverageRecordFromIndiviual() 
+                    self.getPiecewiseDemodulatedValuesFromAverage()
+                dt = self.getValue('Demodulation length')
+                self.log('Data processing %.6f s.' % (time.clock() - t0))
+                if hasattr(self, '_tcycle'):
+                    self.log('Total time %.6f s.' % (time.clock() - self._tcycle))
+                self._tcycle = time.clock()
+                return quant.getTraceDict(self.data[name], dt=dt)
             else:
                 raise self._raiseError(name, mode)
                 
@@ -391,8 +407,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Average record',
                         'Channel B - Average record'):
                 if name in self.data:
-                    return quant.getTraceDict(self.data[name],
-                                              dt=self.dt)
+                    return quant.getTraceDict(self.data[name], dt=self.dt)
                 else:
                     self._raiseError(name, mode)
             elif name in ('Channel A - Average demodulated value',
@@ -406,8 +421,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Average record',
                         'Channel B - Average record'):
                 if name in self.data:
-                    return quant.getTraceDict(self.data[name],
-                                              dt=self.dt)
+                    return quant.getTraceDict(self.data[name], dt=self.dt)
                 else:
                     self._raiseError(name, mode)
             elif name == 'Channel A - Average demodulated value':
@@ -427,17 +441,16 @@ class Driver(InstrumentDriver.InstrumentWorker):
         dFreq = self.getValue('Demodulation frequency')
         skipStart = self.getValue('Skip start')
         nSegment = int(self.getValue('Number of records'))
-        mode = self.getValue('Acquisition mode')
 
         nTotLength = self.data['Channel A'].size
         dt = self.dt
         skip = int(round(skipStart / dt))
-        length = 1 + int(round(self.getValue('Demodulation length') / dt))
+        length = int(round(self.getValue('Demodulation length') / dt))
         segmentLength = int(nTotLength / nSegment)
         length = min(length, segmentLength - skip)
         if length < 1:
             raise Exception('Nothing to demodulate: increase '
-                    'the demodulation or record length.')
+                    'the demodulation length or record length.')
 
         if not hasattr(self, '_firstRun'):
             self._firstRun = True
@@ -483,7 +496,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         if self._bRef:
             vChA = self.data['Channel A'][:,skip:skip+length]
             vDemodVals = np.dot(vChA, self._vExp)
-            vDemodVals /= .5 * np.float32(length)
+            vDemodVals /= np.float32(.5) * np.float32(length)
             vDemodVals *= self._vExpRef
             self.data['Channel A - Demodulated values'] = vDemodVals
             self.data['Channel A - Average demodulated value'] = np.mean(vDemodVals)
@@ -491,7 +504,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data[ch][:,skip:skip+length]
                 vDemodVals = np.dot(vCh, self._vExp)
-                vDemodVals /= .5 * np.float32(length)
+                vDemodVals /= np.float32(.5) * np.float32(length)
                 self.data['%s - Demodulated values' % ch] = vDemodVals
                 self.data['%s - Average demodulated value' % ch] = np.mean(vDemodVals)
                 
@@ -500,18 +513,17 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # get parameters
         dFreq = self.getValue('Demodulation frequency')
         skipStart = self.getValue('Skip start')
-        mode = self.getValue('Acquisition mode')
 
         dt = self.dt
         skip = int(round(skipStart / dt))
-        length = 1 + int(round(self.getValue('Demodulation length') / dt))
+        length = int(round(self.getValue('Demodulation length') / dt))
         vTime = dt * (skip + np.arange(length, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
 
         if self._bRef:
             vChA = self.data['Channel A - Average record'][skip:skip+length]
             vDemodVal = np.dot(vChA, vExp)
-            vDemodVal /= .5 * np.float32(length)
+            vDemodVal /= np.float32(.5) * np.float32(length)
             vChB = self.data['Channel B - Average record'][skip:skip+length]
             vDemodRef = np.dot(vChB, vExp)
             vDemodVal *= np.exp(-1.j * np.angle(vDemodRef))
@@ -520,8 +532,49 @@ class Driver(InstrumentDriver.InstrumentWorker):
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data['%s - Average record' % ch][skip:skip+length]
                 vDemodVal = np.dot(vCh, vExp)
-                vDemodVal /= .5 * np.float32(length)
+                vDemodVal /= .5 * np.float32(length -1)
                 self.data['%s - Average demodulated value' % ch] = vDemodVal
+                
+    def getPiecewiseDemodulatedValuesFromAverage(self):
+        # get parameters
+        dFreq = self.getValue('Demodulation frequency')
+        skipStart = self.getValue('Skip start')
+        nSamples = int(self.getValue('Number of samples'))
+
+        dt = self.dt
+        skip = int(round(skipStart / dt))
+        length = int(round(self.getValue('Demodulation length') / dt))
+        vTime = dt * (skip + np.arange(nSamples - skip, dtype=np.float32))
+        vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
+        nSegments = (nSamples - skip) // length
+        total_length = nSegments * length
+        
+        if skip > 0 or total_length != nSamples:
+            vExp = vExp[skip:skip+total_length]
+        vExp.shape = (nSegments, length)
+
+        if self._bRef:
+            vDemodVals = np.zeros(nSegments, dtype=np.complex64)
+            vChA = self.data['Channel A - Average record']
+            if skip > 0 or total_length != nSamples:
+                vChA = vChA[skip:skip+total_length]
+            vChA.shape = (nSegments, length)
+            for idx in range(nSegments):
+                vDemodVals[idx] = np.dot(vChA[idx], vExp[idx])
+            vDemodVals /= np.float32(.5) * np.float32(length)
+            self.data['Channel A - Average piecewise '
+                      'demodulated values'] = vDemodVals
+        else:
+            for ch in ('Channel A', 'Channel B'):
+                vDemodVals = np.zeros(nSegments, dtype=np.complex64)
+                vCh = self.data['%s - Average record' % ch]
+                if skip > 0 or total_length != nSamples:
+                    vCh = vCh[skip:skip+total_length]
+                for idx in range(nSegments):
+                    vDemodVals[idx] = np.dot(vCh[idx], vExp[idx])
+                vDemodVals /= np.float32(.5) * np.float32(length)
+                self.data['%s - Average piecewise '
+                          'demodulated values' % ch] = vDemodVals
 
 
 if __name__ == '__main__':
