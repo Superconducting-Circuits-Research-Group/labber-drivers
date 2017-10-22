@@ -189,7 +189,7 @@ class AlazarTechDigitizer():
         self.callFunc('AlazarWaitAsyncBufferComplete', self.handle,
                       buffer, timeout_ms)
 
-    def readRecordsDMA(self, mode, nSamples, nRecord,
+    def readRecordsDMA(self, mode, nSamples, nRecord, nRecordsPerBuffer,
                 bConfig=True, bArm=True, bMeasure=True,
                 funcStop=None, funcProgress=None,
                 timeout=None, firstTimeout=None,
@@ -214,33 +214,35 @@ class AlazarTechDigitizer():
             raise MemoryError('Maximum allowed buffer size '
                     'is too small to contain even a single record.')
 
-        buffersPerAcquisition = 1
-        recordsPerBuffer = nRecord
-        nResidual = nRecord
-        consistencyFlag = False
-        while not consistencyFlag:
-            bytesPerBuffer = int(self.numberOfChannels * recordsPerBuffer *
-                                 bytesPerRecord)
-            if bytesPerBuffer > maxBufferSize:
-                noFactorFlag = True
-                for factor in range(2, int(np.sqrt(nResidual)) + 2):
-                    if nResidual % factor == 0:
-                        recordsPerBuffer = int(recordsPerBuffer / factor)
-                        nResidual = int(nResidual / factor)
-                        noFactorFlag = False
+        if nRecord % nRecordsPerBuffer != 0:
+            log.info('Recomputing the number of records per buffer.')
+            buffersPerAcquisition = 1
+            recordsPerBuffer = nRecord
+            nResidual = nRecord
+            consistencyFlag = False
+            while not consistencyFlag:
+                bytesPerBuffer = int(self.numberOfChannels *
+                        recordsPerBuffer * bytesPerRecord)
+                if bytesPerBuffer > maxBufferSize:
+                    noFactorFlag = True
+                    for factor in range(2, int(np.sqrt(nResidual)) + 2):
+                        if nResidual % factor == 0:
+                            recordsPerBuffer = int(recordsPerBuffer / factor)
+                            nResidual = int(nResidual / factor)
+                            noFactorFlag = False
+                            break
+                    if noFactorFlag:
                         break
-                if noFactorFlag:
-                    break
-            else:
-                consistencyFlag = True
-        if not consistencyFlag:
-            raise MemoryError('The number of records and the number '
-                'of samples in a single record is not consistent '
-                'with the allowed maximum buffer size. Try to use '
-                'parameter values that could be factorized into small '
-                'prime numbers (values that are powers of 2 are most '
-                'preferable). Alternatively, try to increase the '
-                'maximum buffer size.')
+                else:
+                    consistencyFlag = True
+            if not consistencyFlag:
+                raise MemoryError('The number of records and the number'
+                    ' of samples in a single record is not consistent '
+                    'with the allowed maximum buffer size. Try to use '
+                    'parameter values that could be factorized into '
+                    'small prime numbers (values that are powers of 2 '
+                    'are most preferable). Alternatively, try to '
+                    'increase the maximum buffer size.')
         buffersPerAcquisition = int(nRecord / recordsPerBuffer)
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((buffersPerAcquisition + 1) // 2),
@@ -378,7 +380,7 @@ class AlazarTechDigitizer():
             avgRecord = np.sum(avgRecord, axis=1)
             if samplesPerRecord != nSamples:
                 avgRecord = avgRecord[:,:nSamples]
-            avgRecordFloat = np.asfarray(avgRecord, dtype=np.float32)
+            avgRecordFloat = avgRecord.astype(dtype=np.float32, copy=True)
             avgRecordFloat /= nRecord
             avgRecordFloat -= self.codeZero
             avgRecordFloat[0] *= rangeA
@@ -393,7 +395,7 @@ class AlazarTechDigitizer():
                     1, 0).reshape(self.numberOfChannels, nRecord, samplesPerRecord)
             if samplesPerRecord != nSamples:
                 recordsView = recordsView[:,:,:nSamples]
-            recordsFloat = recordsView.astype(dtype=np.float32)
+            recordsFloat = recordsView.astype(dtype=np.float32, copy=True)
             recordsFloat -= self.codeZero
 
             recordsFloat[0] *= rangeA
