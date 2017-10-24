@@ -298,7 +298,7 @@ class AlazarTechDigitizer():
                 self.buffers.append(DMABuffer(sample_type,
                                               bytesPerBuffer))
             # initialize data arrays
-            if mode == 'individual':
+            if mode == 'i':
                 samples = self.nChannels * nRecord * samplesPerRecord
                 if self.bytesPerSample == 1:
                     self._records = np.empty(samples, dtype=np.uint8)
@@ -335,7 +335,7 @@ class AlazarTechDigitizer():
         if mode == 'i':
             records = self._records
         else:
-            if self.bytesPerSample == 1:
+            if self.bytesPerSample == 1 and nRecord < 2**24:
                 avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint32)
             else:
                 avgRecord = np.zeros(samplesPerBuffer, dtype=np.uint64)
