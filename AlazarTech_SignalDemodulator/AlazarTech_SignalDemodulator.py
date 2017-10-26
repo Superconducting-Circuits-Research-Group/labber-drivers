@@ -90,6 +90,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # in hardware looping, number of records is set by
             # the hardware looping
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+            # disable trig timeout (set to 3 minutes)
+            self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 180.0)
             # need to re-configure the card since record size was not
             # known at config
             self.dig.readRecordsDMA(self._mode, self._nSamples,
@@ -103,7 +105,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.dig.readRecordsDMA(self._mode, self._nSamples,
                     self._nRecords, self._nRecordsPerBuffer,
                     bConfig=False, bArm=True, bMeasure=False,
-                    maxBuffers=maxBuffers,
+                    maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
 
     def _callbackProgress(self, progress):
@@ -410,11 +412,11 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     if 'Channel A - Average record' not in self.data:
                         self.getAverageRecordFromIndiviual() 
                     self.getPiecewiseDemodulatedValuesFromAverage()
-                dt = self.getValue('Demodulation length')
                 self.log('Data processing %.6f s.' % (time.clock() - t0))
                 if hasattr(self, '_tcycle'):
                     self.log('Total time %.6f s.' % (time.clock() - self._tcycle))
                 self._tcycle = time.clock()
+                dt = self.getValue('Demodulation length')
                 return quant.getTraceDict(self.data[name], dt=dt)
             else:
                 raise self._raiseError(name, mode)
@@ -623,7 +625,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         skip = self._skip
         length = self._length
         nSamples = self._nSamples
-        vTime = dt * (skip + np.arange(length, dtype=np.float32))
+        vTime = self._dt * (skip + np.arange(length, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
 
         if self._bRef:
