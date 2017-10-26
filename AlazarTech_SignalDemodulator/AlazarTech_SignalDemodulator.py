@@ -318,12 +318,16 @@ class Driver(InstrumentDriver.InstrumentWorker):
         self.data['Channel A'] = records[:,start:end]
         if mode.startswith('Average') or \
                 mode.startswith('Referenced Average'):
-            self.data['Channel A - Average record'] = np.mean(records)
+            self.data['Channel A - Average record'] = \
+                    np.mean(self.data['Channel A'])
         
         records = self.dig.readRecordsSinglePort(2)
         self.data['Channel B'] = records[:,start:end]
-        if mode.startswith('Average'):
-            self.data['Channel B - Average record'] = np.mean(records)
+        self.log(self.data['Channel B'])
+        if mode.startswith('Average') or \
+                mode.startswith('Referenced Average'):
+            self.data['Channel B - Average record'] = \
+                    np.mean(self.data['Channel B'])
 
     def _raiseError(self, name, mode):
             raise NotImplementedError("Output data '%s' could not be "
@@ -562,10 +566,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         if self._bRef:
             vChA = self.data['Channel A - Average record'][skip:skip+length]
-            try:
-                vDemodVal = np.dot(vChA, vExp)
-            except ValueError:
-                raise self._raiseDemodulationLengthError()
+            vDemodVal = np.dot(vChA, vExp)
             vDemodVal /= np.float32(.5) * np.float32(length)
             vChB = self.data['Channel B - Average record'][skip:skip+length]
             vDemodRef = np.dot(vChB, vExp)
@@ -574,10 +575,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         else:
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data['%s - Average record' % ch][skip:skip+length]
-                try:
-                    vDemodVal = np.dot(vCh, vExp)
-                except ValueError:
-                    raise self._raiseDemodulationLengthError()
+                vDemodVal = np.dot(vCh, vExp)
                 vDemodVal /= .5 * np.float32(length -1)
                 self.data['%s - Average demodulated value' % ch] = vDemodVal
 
@@ -590,8 +588,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         vTime = self._dt * (skip + np.arange(nSamples - skip, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
         nSegments = (nSamples - skip) // length
-        if nSegments < 1:
-            raise self._raiseDemodulationLengthError()
         total_length = nSegments * length
 
         if skip > 0 or total_length != nSamples:
