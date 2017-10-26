@@ -12,7 +12,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Perform the operation of opening the instrument connection."""
         # keep track of sampled records
         self.data = {}
-        self.dt = 1.0
+        self._dt = 1.0
         # open connection
         boardId = int(self.comCfg.address)
         timeout = self.dComCfg['Timeout']
@@ -42,7 +42,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation."""
         # only implemented for records
-        mode = self.getValue('Acquisition mode')
         if quant.name in ('Channel A - Records',
                           'Channel B - Records',
                           'Channel A - Average record',
@@ -60,7 +59,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 self.getSignalHardwareLoop(quant, options)
-                return self.getData(mode, quant)
+                return self.getData(quant)
             
             # check if first call, if so get new records
             if self.isFirstCall(options):
@@ -72,32 +71,20 @@ class Driver(InstrumentDriver.InstrumentWorker):
                         hardware_trig=self.isHardwareTrig(options))
                 else:
                     self.getRecordsSinglePort()
-                    
-            if mode.startswith('Referenced'):
-                self._bRef = True
-            else:
-                self._bRef = False
 
             # cash demodulation parameters
-            if mode.startswith('Individual') or \
-                    mode.startswith('Referenced Individual'):
+            if self._mode.startswith('Individual') or \
+                    self._mode.startswith('Referenced Individual'):
                 self.cashDemodulationParametersForIndividual()
 
             # return correct data
-            return self.getData(mode, quant)
+            return self.getData(quant)
         else:
             # just return the quantity value
             return quant.getValue()
 
     def performArm(self, quant_names, options={}):
         """Perform the instrument arm operation."""
-        # get config
-        nSample = int(round(self.getValue('Number of samples')))
-        nRecords = int(round(self.getValue('Number of records')))
-        nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
-        maxBufferSize = int(self.getValue('Max buffer size'))
-        nMaxBuffer = int(self.getValue('Max number of buffers'))
-        mode = self.getValue('Acquisition mode')
         # configure and start acquisition
         if self.isHardwareLoop(options):
             # in hardware looping, number of records is set by
@@ -105,19 +92,19 @@ class Driver(InstrumentDriver.InstrumentWorker):
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             # need to re-configure the card since record size was not
             # known at config
-            self.dig.readRecordsDMA(mode, nSample, n_seq,
-                    nRecordsPerBuffer,
+            self.dig.readRecordsDMA(self._mode, self._nSamples,
+                    n_seq, self._nRecordsPerBuffer,
                     bConfig=True, bArm=True, bMeasure=False,
-                    maxBuffers=maxBuffers,
-                    maxBufferSize=maxBufferSize)
+                    maxBuffers=self._nMaxBuffers,
+                    maxBufferSize=self._maxBufferSize)
         else:
             # if not hardware looping, just trigger the card, buffers
             # are already configured
-            self.dig.readRecordsDMA(mode, nSample, nRecords,
-                    nRecordsPerBuffer,
+            self.dig.readRecordsDMA(self._mode, self._nSamples,
+                    self._nRecords, self._nRecordsPerBuffer,
                     bConfig=False, bArm=True, bMeasure=False,
                     maxBuffers=maxBuffers,
-                    maxBufferSize=maxBufferSize)
+                    maxBufferSize=self._maxBufferSize)
 
     def _callbackProgress(self, progress):
         """Report progress to server, as text string."""
@@ -129,21 +116,17 @@ class Driver(InstrumentDriver.InstrumentWorker):
         (seq_no, n_seq) = self.getHardwareLoopIndex(options)
         # if first sequence call, get data
         if seq_no == 0 and self.isFirstCall(options):
-            nSample = int(round(self.getValue('Number of samples')))
-            nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
-            maxBufferSize = int(round(self.getValue('Max buffer size')))
-            maxBuffers = int(round(self.getValue('Max number of buffers')))
-            mode = self.getValue('Acquisition mode')
             # show status before starting acquisition
             self.reportStatus('Digitizer - Waiting for signal')
             # get data
-            self.data = self.dig.readRecordsDMA(mode, nSample, n_seq,
-                    nRecordsPerBuffer,
+            self.data = self.dig.readRecordsDMA(self._mode,
+                    self._nSamples, n_seq, self._nRecordsPerBuffer,
                     bConfig=False, bArm=False, bMeasure=True,
                     funcStop=self.isStopped,
                     funcProgress=self._callbackProgress,
                     firstTimeout=self.dComCfg['Timeout'] + 180.0,
-                    maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
+                    maxBuffers=self._nMaxBuffers,
+                    maxBufferSize=self._maxBufferSize)
 
     def setConfiguration(self):
         """Set digitizer configuration based on driver settings."""
@@ -187,7 +170,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.dig.AlazarSetCaptureClock(SourceId, SampleRateId, 0,
                                            Decimation)
         # define time step from sample rate
-        self.dt = 1.0 / lFreq[sampleRateIndex]
+        self._dt = 1.0 / lFreq[sampleRateIndex]
         # configure inputs
         chnls = {1: 'Channel A', 2: 'Channel B'}
         for n in (1, 2):
@@ -243,47 +226,58 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.dig.AlazarSetExternalTrigger(Coupling)
 
         # set trigger delay and timeout
-        delay = int(round(self.getValue('Trigger delay') / self.dt))
+        delay = int(round(self.getValue('Trigger delay') / self._dt))
         self.dig.AlazarSetTriggerDelay(delay)
         self.dig.AlazarSetTriggerTimeOut(time=timeout)
+
         # configure memory buffers, only possible when using DMA read
-        nPostSize = int(round(self.getValue('Number of samples')))
-        nRecords = int(round(self.getValue('Number of records')))
-        nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
-        maxBufferSize = int(round(self.getValue('Max buffer size')))
-        maxBuffers = int(round(self.getValue('Max number of buffers')))
-        mode = self.getValue('Acquisition mode')
+        self._nSamples = int(round(self.getValue('Number of samples')))
+        self._nRecords = int(round(self.getValue('Number of records')))
+        self._nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
+        self._maxBufferSize = int(round(self.getValue('Max buffer size')))
+        self._nMaxBuffers = int(round(self.getValue('Max number of buffers')))
+        self._mode = self.getValue('Acquisition mode')
+        
+        if self._mode != 'Raw':
+            self._length = int(round(self.getValue('Demodulation length') / self._dt))
+            self._dFreq = self.getValue('Demodulation frequency')
+            self._skip = int(round(self.getValue('Skip start') / self._dt))
+            if self._length > self._nSamples:
+                self._length = self._nSamples
+            if self._length < 1:
+                raise Exception('Nothing to demodulate: increase '
+                    'the demodulation length or record length.')
+                   
+        if self._mode.startswith('Referenced'):
+            self._bRef = True
+        else:
+            self._bRef = False
+        
         # configure DMA read
-        self.dig.readRecordsDMA(mode, nPostSize, nRecords,
-                nRecordsPerBuffer,
+        self.dig.readRecordsDMA(self._mode, self._nSamples,
+                self._nRecords, self._nRecordsPerBuffer,
                 bConfig=True, bArm=False, bMeasure=False,
-                maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
+                maxBuffers=self._nMaxBuffers,
+                maxBufferSize=self._maxBufferSize)
 
     def getRecordsDMA(self, hardware_trig=False):
         """Resample the data with DMA."""
-        # get channels in use
-        nPostSize = int(round(self.getValue('Number of samples')))
-        nRecords = int(round(self.getValue('Number of records')))
-        nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
-        maxBufferSize = int(round(self.getValue('Max buffer size')))
-        maxBuffers = int(round(self.getValue('Max number of buffers')))
-        mode = self.getValue('Acquisition mode')
         # in hardware triggering mode, there is no noed to re-arm
         # the card
         bArm = not hardware_trig
         # get data
-        self.data = self.dig.readRecordsDMA(mode, nPostSize, nRecords,
-                nRecordsPerBuffer,
+        self.data = self.dig.readRecordsDMA(self._mode, self._nSamples,
+                self._nRecords, self._nRecordsPerBuffer,
                 bConfig=False, bArm=bArm, bMeasure=True,
                 funcStop=self.isStopped,
-                maxBuffers=maxBuffers, maxBufferSize=maxBufferSize)
+                maxBuffers=self._nMaxBuffers,
+                maxBufferSize=self._maxBufferSize)
 
     def getRecordsSinglePort(self):
         """Resample the data."""
         # get channels in use
         nPreSize = int(round(self.getValue('Pre-trigger samples')))
-        nPostSize = int(round(self.getValue('Number of samples')))
-        nRecords = int(round(self.getValue('Number of records')))
+        nPostSize = self._nSamples
 
         model = self.getModel()
         if model == '9870':
@@ -300,7 +294,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                                       % model)
 
         self.dig.AlazarSetRecordSize(nPreAlgn, nPostAlgn)
-        self.dig.AlazarSetRecordCount(nRecords)
+        self.dig.AlazarSetRecordCount(self._nRecords)
         # start aquisition
         self.dig.AlazarStartCapture()
         nTry = self.dComCfg['Timeout'] / 0.05
@@ -318,7 +312,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             return
 
         # read data for channels in use
-        mode = self.getValue('Acquisition mode')
+        mode = self._mode
 
         records = self.dig.readRecordsSinglePort(1)
         self.data['Channel A'] = records[:,start:end]
@@ -335,15 +329,16 @@ class Driver(InstrumentDriver.InstrumentWorker):
             raise NotImplementedError("Output data '%s' could not be "
                     "acquired in acquisition mode '%s'." % (name, mode))
 
-    def getData(self, mode, quant):
+    def getData(self, quant):
         """Return data that corresponds to the seleted data acquisition
         mode."""
         name = quant.name
+        mode = self._mode
         if mode == 'Raw':
             if name in ('Channel A - Records',
                         'Channel B - Records'):
                 flattened = self.data[name[:9]].ravel()
-                return quant.getTraceDict(flattened, dt=self.dt)
+                return quant.getTraceDict(flattened, dt=self._dt)
             else:
                 raise self._raiseError(name, mode)
                 
@@ -351,7 +346,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Records',
                         'Channel B - Records'):
                 flattened = self.data[name[:9]].ravel()
-                return quant.getTraceDict(flattened, dt=self.dt)
+                return quant.getTraceDict(flattened, dt=self._dt)
             elif name in ('Channel A - Demodulated values',
                           'Channel B - Demodulated values'):
                 if name not in self.data:
@@ -371,7 +366,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                           'Channel B - Average record'):
                 if name not in self.data:
                     self.getAverageRecordFromIndiviual()
-                return quant.getTraceDict(self.data[name], dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self._dt)
             elif name in ('Channel A - Average piecewise demodulated values',
                           'Channel B - Average piecewise demodulated values'):
                 if name not in self.data:
@@ -387,7 +382,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Records',
                         'Channel B - Records'):
                 flattened = self.data[name[:9]].ravel()
-                return quant.getTraceDict(flattened, dt=self.dt)
+                return quant.getTraceDict(flattened, dt=self._dt)
             elif name == 'Channel A - Demodulated values':
                 if name not in self.data:
                     self.getDemodulatedValuesFromIndividual()
@@ -404,7 +399,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             elif name == 'Channel A - Average record':
                 if name not in self.data:
                     self.getAverageRecordFromIndiviual()
-                return quant.getTraceDict(self.data[name], dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self._dt)
             elif name == 'Channel A - Average piecewise demodulated values':
                 t0 = time.clock()
                 if name not in self.data:
@@ -423,7 +418,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         elif mode == 'Average Record Demodulation':
             if name in ('Channel A - Average record',
                         'Channel B - Average record'):
-                return quant.getTraceDict(self.data[name], dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self._dt)
             elif name in ('Channel A - Average demodulated value',
                           'Channel B - Average demodulated value'):
                 self.getDemodulatedValueFromAverage()
@@ -440,7 +435,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         elif mode == 'Referenced Average Record Demodulation':
             if name in ('Channel A - Average record',
                         'Channel B - Average record'):
-                return quant.getTraceDict(self.data[name], dt=self.dt)
+                return quant.getTraceDict(self.data[name], dt=self._dt)
             elif name == 'Channel A - Average demodulated value':
                 t0 = time.clock()
                 self.getDemodulatedValueFromAverage()
@@ -466,7 +461,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Average buffer',
                         'Channel B - Average buffer'):
                 return quant.getTraceDict(self.data[name].flatten(),
-                                          dt=self.dt)
+                                          dt=self._dt)
             elif name in ('Channel A - Average buffer demodulated values',
                           'Channel B - Average buffer demodulated values'):
                 if name not in self.data:
@@ -480,7 +475,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             if name in ('Channel A - Average buffer',
                         'Channel B - Average buffer'):
                 return quant.getTraceDict(self.data[name].flatten(),
-                                          dt=self.dt)
+                                          dt=self._dt)
             elif name == 'Channel A - Average buffer demodulated values':
                 if name not in self.data:
                     self.getDemodulatedValuesFromBuffer()
@@ -494,36 +489,28 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def cashDemodulationParametersForIndividual(self):
         """Cash parameters that are used for calculating output values."""
         # get parameters
-        dFreq = self.getValue('Demodulation frequency')
-        skipStart = self.getValue('Skip start')
-        nSegment = int(self.getValue('Number of records'))
-
         nTotLength = self.data['Channel A'].size
-        dt = self.dt
-        skip = int(round(skipStart / dt))
-        length = int(round(self.getValue('Demodulation length') / dt))
-        segmentLength = int(nTotLength / nSegment)
-        length = min(length, segmentLength - skip)
-        if length < 1:
-            raise Exception('Nothing to demodulate: increase '
-                    'the demodulation length or record length.')
+        dt = self._dt
+        dFreq = self._dFreq
+        skip = self._skip
+        length = self._length
+        nRecords = self._nRecords
+        recordLength = nTotLength // nRecords
+        length = min(length, recordLength - skip)
 
         if not hasattr(self, '_firstRun'):
             self._firstRun = True
         # calculate cos/sin vectors, allow segmenting
-        if self._firstRun or dt != self._dt or \
-                skip != self._skip or \
-                length != self._length or \
-                dFreq != self._dFreq:
+        if self._firstRun or dt != self._prev_dt or \
+                skip != self._prev_skip or \
+                length != self._prev_length or \
+                dFreq != self._prev_dFreq:
             vTime = dt * (skip + np.arange(length, dtype=np.float32))
             self._vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
-            self._dt = dt
-            self._skip = skip
-            self._length = length
-            self._dFreq = dFreq
-        
-        if self._firstRun or self._nSegment != nSegment:
-            self._nSegment = nSegment
+            self._prev_dt = dt
+            self._prev_skip = skip
+            self._prev_length = length
+            self._prev_dFreq = dFreq
         
         if self._bRef:
             vChB = self.data['Channel B'][:,skip:skip+length]
@@ -536,12 +523,12 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Calculate time average from data and reference."""
         if self._bRef:
             timeAverage = np.dot(self.data['Channel A'].T, self._vExpRef)
-            timeAverage /= self._nSegment
+            timeAverage /= self._nRecords
             self.data['Channel A - Average record'] = timeAverage
         else:
             for ch in ('Channel A', 'Channel B'):
                 timeAverage = np.sum(self.data[ch], axis=0)
-                timeAverage /= self._nSegment
+                timeAverage /= self._nRecords
                 self.data['%s - Average record' % ch] = timeAverage
 
     def getDemodulatedValuesFromIndividual(self):
@@ -567,18 +554,18 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def getDemodulatedValueFromAverage(self):
         """Calculate complex signal vector from data and reference."""
         # get parameters
-        dFreq = self.getValue('Demodulation frequency')
-        skipStart = self.getValue('Skip start')
-
-        dt = self.dt
-        skip = int(round(skipStart / dt))
-        length = int(round(self.getValue('Demodulation length') / dt))
-        vTime = dt * (skip + np.arange(length, dtype=np.float32))
+        dFreq = self._dFreq
+        skip = self._skip
+        length = self._length
+        vTime = self._dt * (skip + np.arange(length, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
 
         if self._bRef:
             vChA = self.data['Channel A - Average record'][skip:skip+length]
-            vDemodVal = np.dot(vChA, vExp)
+            try:
+                vDemodVal = np.dot(vChA, vExp)
+            except ValueError:
+                raise self._raiseDemodulationLengthError()
             vDemodVal /= np.float32(.5) * np.float32(length)
             vChB = self.data['Channel B - Average record'][skip:skip+length]
             vDemodRef = np.dot(vChB, vExp)
@@ -587,22 +574,24 @@ class Driver(InstrumentDriver.InstrumentWorker):
         else:
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data['%s - Average record' % ch][skip:skip+length]
-                vDemodVal = np.dot(vCh, vExp)
+                try:
+                    vDemodVal = np.dot(vCh, vExp)
+                except ValueError:
+                    raise self._raiseDemodulationLengthError()
                 vDemodVal /= .5 * np.float32(length -1)
                 self.data['%s - Average demodulated value' % ch] = vDemodVal
 
     def getPiecewiseDemodulatedValuesFromAverage(self):
         # get parameters
-        dFreq = self.getValue('Demodulation frequency')
-        skipStart = self.getValue('Skip start')
-        nSamples = int(round(self.getValue('Number of samples')))
-
-        dt = self.dt
-        skip = int(round(skipStart / dt))
-        length = int(round(self.getValue('Demodulation length') / dt))
-        vTime = dt * (skip + np.arange(nSamples - skip, dtype=np.float32))
+        dFreq = self._dFreq
+        skip = self._skip
+        length = self._length
+        nSamples = self._nSamples
+        vTime = self._dt * (skip + np.arange(nSamples - skip, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
         nSegments = (nSamples - skip) // length
+        if nSegments < 1:
+            raise self._raiseDemodulationLengthError()
         total_length = nSegments * length
 
         if skip > 0 or total_length != nSamples:
@@ -634,15 +623,11 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def getDemodulatedValuesFromBuffer(self):
         # get parameters
-        dFreq = self.getValue('Demodulation frequency')
-        skipStart = self.getValue('Skip start')
-        nSamples = int(round(self.getValue('Number of samples')))
-
-        dt = self.dt
-        skip = int(round(skipStart / dt))
-        length = int(round(self.getValue('Demodulation length') / dt))
+        dFreq = self._dFreq
+        skip = self._skip
+        length = self._length
+        nSamples = self._nSamples
         vTime = dt * (skip + np.arange(length, dtype=np.float32))
-
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
 
         if self._bRef:
@@ -656,9 +641,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
         else:
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data['%s - Average buffer record' % ch][:,skip:skip+length]
-                vDemodVal = np.dot(vCh, vExp)
+                DemodVal = np.dot(vCh, vExp)
                 vDemodVal /= .5 * np.float32(length -1)
                 self.data['%s - Average buffer demodulated values' % ch] = vDemodVal
+
 
 if __name__ == '__main__':
     pass
