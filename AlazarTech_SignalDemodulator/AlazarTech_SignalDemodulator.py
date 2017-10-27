@@ -272,6 +272,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 self._nRecords, self._nRecordsPerBuffer,
                 bConfig=False, bArm=bArm, bMeasure=True,
                 funcStop=self.isStopped,
+                funcProgress=self._callbackProgress,
                 maxBuffers=self._nMaxBuffers,
                 maxBufferSize=self._maxBufferSize)
 
@@ -624,7 +625,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         dFreq = self._dFreq
         skip = self._skip
         length = self._length
-        nSamples = self._nSamples
         vTime = self._dt * (skip + np.arange(length, dtype=np.float32))
         vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
 
