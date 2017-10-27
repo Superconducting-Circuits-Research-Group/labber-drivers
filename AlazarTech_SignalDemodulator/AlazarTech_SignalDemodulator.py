@@ -593,32 +593,29 @@ class Driver(InstrumentDriver.InstrumentWorker):
         nSegments = (nSamples - skip) // length
         total_length = nSegments * length
 
-        if skip > 0 or total_length != nSamples:
-            vExp = vExp[skip:skip+total_length]
+        if total_length != nSamples:
+            vExp = vExp[:total_length]
         vExp.shape = (nSegments, length)
 
-        if self._bRef:
-            vDemodVals = np.zeros(nSegments, dtype=np.complex64)
-            vChA = self.data['Channel A - Average record']
+        data = {}
+        for ch in ('Channel A', 'Channel B'):
+            vDemodVals = np.empty(nSegments, dtype=np.complex64)
+            vCh = self.data['%s - Average record' % ch]
             if skip > 0 or total_length != nSamples:
-                vChA = vChA[skip:skip+total_length]
-            vChA.shape = (nSegments, length)
+                vCh = vCh[skip:skip+total_length]
+            vCh.shape = (nSegments, length)
             for idx in range(nSegments):
-                vDemodVals[idx] = np.dot(vChA[idx], vExp[idx])
+                vDemodVals[idx] = np.dot(vCh[idx], vExp[idx])
             vDemodVals /= np.float32(.5) * np.float32(length)
-            self.data['Channel A - Average piecewise '
-                      'demodulated values'] = vDemodVals
-        else:
-            for ch in ('Channel A', 'Channel B'):
-                vDemodVals = np.zeros(nSegments, dtype=np.complex64)
-                vCh = self.data['%s - Average record' % ch]
-                if skip > 0 or total_length != nSamples:
-                    vCh = vCh[skip:skip+total_length]
-                for idx in range(nSegments):
-                    vDemodVals[idx] = np.dot(vCh[idx], vExp[idx])
-                vDemodVals /= np.float32(.5) * np.float32(length)
-                self.data['%s - Average piecewise '
-                          'demodulated values' % ch] = vDemodVals
+            data[ch] = vDemodVals
+  
+        if self._bRef:
+            data['Channel A'] *= np.exp(-1.j * np.angle(data['Channel B']))
+        else:         
+            self.data['Channel B - Average piecewise '
+                      'demodulated values'] = data['Channel B']
+        self.data['Channel A - Average piecewise '
+                  'demodulated values'] = data['Channel A'] 
 
     def getDemodulatedValuesFromBuffer(self):
         # get parameters
