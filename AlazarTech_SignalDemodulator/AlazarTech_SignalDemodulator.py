@@ -137,8 +137,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
         SourceId = int(self.getCmdStringFromValue('Clock source'))
         if self.getValue('Clock source') == 'Internal':
             # internal
-            SampleRateId = int(round(self.getCmdStringFromValue('Sample rate'),
-                    0))
+            SampleRateId = int(self.getCmdStringFromValue('Sample rate'),
+                    16)
             lFreq = [1E3, 2E3, 5E3, 10E3, 20E3, 50E3, 100E3, 200E3,
                      500E3, 1E6, 2E6, 5E6, 10E6, 20E6, 50E6, 100E6,
                      200E6, 500E6, 1E9, 1.2E9, 1.5E9, 2E9, 2.4E9, 3E9,
