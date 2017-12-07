@@ -48,6 +48,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
                           'Channel B - Average record',
                           'Channel A - Demodulated values',
                           'Channel B - Demodulated values',
+                          'Channel A - SNR',
+                          'Channel B - SNR',
                           'Channel A - Average demodulated value',
                           'Channel B - Average demodulated value',
                           'Channel A - Average piecewise demodulated values',
@@ -382,6 +384,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     self.getPiecewiseDemodulatedValuesFromAverage()
                 dt = self.getValue('Demodulation length')
                 return quant.getTraceDict(self.data[name], dt=dt)
+            elif name in ('Channel A - SNR', 'Channel B - SNR'):
+                if name not in self.data:
+                        self.getDemodulatedValuesFromIndividual()
+                return self.data[name]
             else:
                 raise self._raiseError(name, mode)
                 
@@ -419,6 +425,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 self._tcycle = time.clock()
                 dt = self.getValue('Demodulation length')
                 return quant.getTraceDict(self.data[name], dt=dt)
+            elif name == 'Channel A - SNR':
+                if name not in self.data:
+                    self.getDemodulatedValuesFromIndividual()
+                return self.data[name]
             else:
                 raise self._raiseError(name, mode)
                 
@@ -549,14 +559,18 @@ class Driver(InstrumentDriver.InstrumentWorker):
             vDemodVals /= np.float32(.5) * np.float32(length)
             vDemodVals *= self._vExpRef
             self.data['Channel A - Demodulated values'] = vDemodVals
-            self.data['Channel A - Average demodulated value'] = np.mean(vDemodVals)
+            meanDemodVal = np.mean(vDemodVals)
+            self.data['Channel A - Average demodulated value'] = meanDemodVal
+            self.data['Channel A - SNR'] = np.abs(meanDemodVal) / np.std(vDemodVals)
         else:
             for ch in ('Channel A', 'Channel B'):
                 vCh = self.data[ch][:,skip:skip+length]
                 vDemodVals = np.dot(vCh, self._vExp)
                 vDemodVals /= np.float32(.5) * np.float32(length)
                 self.data['%s - Demodulated values' % ch] = vDemodVals
-                self.data['%s - Average demodulated value' % ch] = np.mean(vDemodVals)
+                meanDemodVal = np.mean(vDemodVals)
+                self.data['%s - Average demodulated value' % ch] = meanDemodVal
+                self.data['%s - SNR' % ch] = np.abs(meanDemodVal) / np.std(vDemodVals)
 
     def getDemodulatedValueFromAverage(self):
         """Calculate complex signal vector from data and reference."""
