@@ -3,7 +3,7 @@
 	Sample rate: xxx samples per second
 	Number of points: number of samples in one output?
 	First pulse delays[s]: the time interval between the center of the pulse and the start of the output
-	Trim waveform to sequence: display(?) the waveform from the first non-zero point to the last non-zero point
+	Trim waveform to sequence: send the waveform from the first non-zero point to the last non-zero point
 	Number of outputs: maximum is Four. For each output, there are three channels, Trace-I, Trace-Q, Trace-Gate, that can be sent to the AWG.
 
 -Sequence-
