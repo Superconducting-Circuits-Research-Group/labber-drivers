@@ -28,25 +28,32 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation"""
-        if quant.name in ('Difference',
+        if quant.name in ('First value',
+                          'Last value',
+                          'Difference',
                           'Ratio',
                           'Pairwise difference',
                           'Pairwise ratio'):
-            if quant.name.startswith('Pairwise'):
-                data = self.getValue('Input vector')
-            else:
-                data = self.getValue('Input pair')
+            data = self.getValue('Input vector')
             traces = data['y']
-            traces.shape = (-1, 2)
-            if quant.name.lower().endswith('difference'):
-                value = self.pairwiseDifference(traces)
+            if quant.name == 'First value':
+                value = traces[0]
+            elif quant.name == 'Last value':
+                value = traces[-1]
             else:
-                value = self.pairwiseRatio(traces)
-            if quant.name.startswith('Pairwise'):
-                data['y'] = value
-                value = data
-            else:
-                value = value[0]
+                if not quant.name.startswith('Pairwise') and \
+                        traces.size != 2:
+                    traces = np.array([traces[0], traces[-1]])
+                traces.shape = (-1, 2)
+                if quant.name.lower().endswith('difference'):
+                    value = self.pairwiseDifference(traces)
+                else:
+                    value = self.pairwiseRatio(traces)
+                if quant.name.startswith('Pairwise'):
+                    data['y'] = value
+                    value = data
+                else:
+                    value = value[0]
         else:
             # just return the quantity value
             value = quant.getValue()
