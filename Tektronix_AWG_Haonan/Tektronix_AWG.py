@@ -30,6 +30,7 @@ class Driver(VISA_Driver):
         # init vectors with old values
         self.bWaveUpdated = False
         self.nOldSeq = -1
+        self.nOldLength = 0
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
                        for n1 in range(self.nCh)] for n2 in range(1)]
         # clear old waveforms
@@ -50,6 +51,8 @@ class Driver(VISA_Driver):
         self.writeAndLog(':AWGC:STOP;')
         # init vectors with old values
         self.bWaveUpdated = False
+        self.bLengthUpdate = True
+        self.nOldLength = 0
         self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
                        for n1 in range(self.nCh)] for n2 in range(1)]
@@ -69,8 +72,8 @@ class Driver(VISA_Driver):
         # keep track of if waveform is updated, to avoid sending it many times
         if self.isFirstCall(options):
             self.bWaveUpdated = False
+            self.bLengthUpdate = True
             # if sequence mode, make sure the buffer contains enough waveforms
-            self.log('is HardwareLoop? %d' % (self.isHardwareLoop(options)))
             if self.isHardwareLoop(options):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
                 # if first call, clear sequence and create buffer
@@ -91,6 +94,19 @@ class Driver(VISA_Driver):
                           'Ch 3 - Marker 1', 'Ch 3 - Marker 2',
                           'Ch 4 - Marker 1', 'Ch 4 - Marker 2'):
             # set value, then mark that waveform needs an update
+            self.log('***quant.name=%s, len(value["y"])=%d****' % (quant.name, len(value['y'])))
+            # if the length of the waveform changes, clear all the waveforms and reset them
+            
+            if self.bLengthUpdate and len(value['y']) != self.nOldLength:
+                for n in range(self.nCh):
+                    channel = n+1
+                    self.setValue('Ch %d' % channel, [])
+                    self.setValue('Ch %d - Marker 1' % channel, [])
+                    self.setValue('Ch %d - Marker 2' % channel, [])
+                    # self.createWaveformOnTek(channel, 0, bOnlyClear=True)
+                self.log('======================all waveforms clear===========================')
+                self.bLengthUpdate = False
+            
             quant.setValue(value)
             self.bWaveUpdated = True
         elif quant.name in ('Run'):
@@ -109,7 +125,6 @@ class Driver(VISA_Driver):
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-            self.log('seq_no is %d, n_seq is %d' % (seq_no, n_seq))
             if self.isHardwareLoop(options):
                 seq = seq_no
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
@@ -141,6 +156,7 @@ class Driver(VISA_Driver):
         # get model name and number of channels
         self.nPrevData = 0
         self.bIsStopped = False
+        bWaveUpdate = False
         # go through all channels
         for n in range(self.nCh):
             # channels are numbered 1-4
@@ -148,7 +164,8 @@ class Driver(VISA_Driver):
             vData = self.getValueArray('Ch %d' % channel)
             vMark1 = self.getValueArray('Ch %d - Marker 1' % channel)
             vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
-            bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq)
+            bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
+            self.log('bWaveUpdate=%s' % bWaveUpdate)            
         # check if sequence mode
         if seq is not None:
             # if not final seq call, just return here
@@ -156,6 +173,7 @@ class Driver(VISA_Driver):
             if (seq+1) < n_seq:
                 return
             # final call, check if sequence has changed
+            self.log('bSeqUpdate=%s' % self.bSeqUpdate)
             if self.bSeqUpdate or n_seq != self.nOldSeq:
                 # create sequence list, first clear to reset old values
                 self.writeAndLog('SEQ:LENG 0')
@@ -166,8 +184,8 @@ class Driver(VISA_Driver):
                             name = 'Labber_%d_%d' % (n2+1, n1+1)
                             self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
                                              (n1+1, n2+1, name))
-                    # always wait for trigger 
-                    self.writeAndLog('SEQ:ELEM%d:TWA 1' % (n1+1))
+                    # don't wait for trigger 
+                    self.writeAndLog('SEQ:ELEM%d:TWA 0' % (n1+1))
                 # for last element, set jump to first
                 self.writeAndLog('SEQ:ELEM%d:GOTO:STAT 1' % n_seq)
                 self.writeAndLog('SEQ:ELEM%d:GOTO:IND 1' % n_seq)
@@ -258,7 +276,6 @@ class Driver(VISA_Driver):
 
     def sendWaveformToTek(self, channel, vData, vMark1, vMark2, seq=None):
         """Send waveform to Tek"""
-        self.log('Run mode is %s' % self.getValue('Run mode'))
         # check if sequence
         if seq is None:
             iSeq = 0
@@ -281,7 +298,7 @@ class Driver(VISA_Driver):
         # make sure length of data is the same
         if (len(vMark1)>0 and len(vData)!=len(vMark1)) or \
            (len(vMark2)>0 and len(vData)!=len(vMark2)) or \
-           (self.nPrevData>0 and len(vData)!=self.nPrevData):
+           (self.nPrevData>0 and len(vData)!=self.nPrevData):        
             raise InstrumentDriver.Error(\
                   'All channels need to have the same number of elements')
         self.nPrevData = len(vData)
@@ -298,7 +315,9 @@ class Driver(VISA_Driver):
                 # add marker trace to data trace, with bit shift
                 vU16 += 2**(14+m) * vMU16
         start, length = 0, len(vU16)
+        self.nOldLength = length
         # compare to previous trace
+        self.log('---------channel=%d, length=%d, len=%d----------' % (channel, length, len(self.lOldU16[iSeq][n])))
         if length != len(self.lOldU16[iSeq][n]):
             # stop AWG if still running
             if not self.bIsStopped:
@@ -311,6 +330,7 @@ class Driver(VISA_Driver):
             vIndx = np.nonzero(vU16 != self.lOldU16[iSeq][n])[0]
             if len(vIndx) == 0:
                 # nothing changed, don't update, go on to next
+                self.log('---------channel=%d, nothing changed----------' % (channel))
                 return False
             # some elements changed, find start and length
             start = vIndx[0]
@@ -325,7 +345,6 @@ class Driver(VISA_Driver):
         # send to tek, start by turning off output
         if seq is None:
             # non-sequence mode, get name
-            self.log('non-sequence mode!')
             name = b'Labber_%d' % channel
             sSend = b':OUTP%d:STAT 0;' % channel
             sSend += b':WLIS:WAV:DATA "%s",%d,%d,%s' % (name, start, length,
@@ -333,14 +352,14 @@ class Driver(VISA_Driver):
             self.write_raw(sSend)
             # (re-)set waveform to channel
             self.writeAndLog(':SOUR%d:WAV "%s"' % (channel, name.decode()))
+            self.log('-------waveform for channel%d has been sent--------' % channel)
         else:
             # sequence mode, get name
-            self.log('sequence mode!')
             name = b'Labber_%d_%d' % (channel, seq+1)
             sSend = b':OUTP%d:STAT 0;' % channel
             sSend += b':WLIS:WAV:DATA "%s",%d,%d,%s' % (name, start, length,
                      sHead + vU16[start:start+length].tobytes())
-            sSend += b'SEQ:ELEM%d:WAV%d' % (1, channel)
+            # sSend += b'SEQ:ELEM%d:WAV%d' % (1, channel)
             self.write_raw(sSend)
         # store new waveform for next call
         self.lOldU16[iSeq][n] = vU16

@@ -215,7 +215,7 @@ class AlazarTechDigitizer():
         if self.nChannels * bytesPerRecord > maxBufferSize:
             raise MemoryError('Maximum allowed buffer size '
                     'is too small to contain even a single record.')
-
+        log.info('---------nRecord = %d, nRecordsPerBuffer = %d-----------' % (nRecord, nRecordsPerBuffer))
         if nRecord % nRecordsPerBuffer != 0:
             log.info('Recomputing the number of records per buffer.')
             nBuffersPerAcquisition = 1
@@ -249,14 +249,16 @@ class AlazarTechDigitizer():
             bytesPerBuffer = int(self.nChannels *
                         nRecordsPerBuffer * bytesPerRecord)
         nBuffersPerAcquisition = int(nRecord / nRecordsPerBuffer)
+        log.info('---------nBuffersPerAcquisition = %d-----------' % nBuffersPerAcquisition)
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((nBuffersPerAcquisition + 1) // 2),
-                              maxBuffers))
-                              
+                              maxBuffers))                          
         if mode.startswith('Average Record') or \
                 mode.startswith('Referenced Average Record'):
             mode = 'a'
-        elif mode.startswith('Referenced Average Buffer'):
+        elif mode.startswith('Average Buffer') or \
+                mode.startswith('Referenced Average Buffer'):
+            log.info('mode.startswith Buffer')
             mode = 'b'
         else:
             mode = 'i'
@@ -435,6 +437,7 @@ class AlazarTechDigitizer():
             avgRecordFloat[0] *= rangeA
             avgRecordFloat[1] *= rangeB
 
+            log.info('------------------------------------------------------------------------------')
             data['Channel A - Average buffer'] = avgRecordFloat[0]
             data['Channel B - Average buffer'] = avgRecordFloat[1]
 

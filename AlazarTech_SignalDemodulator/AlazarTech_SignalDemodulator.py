@@ -88,19 +88,31 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performArm(self, quant_names, options={}):
         """Perform the instrument arm operation."""
         # configure and start acquisition
-        if self.isHardwareLoop(options):
-            # in hardware looping, number of records is set by
-            # the hardware looping
-            (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-            # disable trig timeout (set to 3 minutes)
-            self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 180.0)
-            # need to re-configure the card since record size was not
-            # known at config
-            self.dig.readRecordsDMA(self._mode, self._nSamples,
-                    n_seq, self._nRecordsPerBuffer,
-                    bConfig=True, bArm=True, bMeasure=False,
-                    maxBuffers=self._nMaxBuffers,
-                    maxBufferSize=self._maxBufferSize)
+        if self.isHardwareLoop(options):            
+            if self._mode.endswith('AWG Hardware Loop'):
+                # disable trig timeout (set to 3 minutes)
+                self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 180.0)
+                # need to re-configure the card since record size was not
+                # known at config
+                self.dig.readRecordsDMA(self._mode, self._nSamples,
+                        self._nRecords, self._nRecordsPerBuffer,
+                        bConfig=True, bArm=True, bMeasure=False,
+                        maxBuffers=self._nMaxBuffers,
+                        maxBufferSize=self._maxBufferSize)
+            else:
+                # in hardware looping without AWG, number of records is set by
+                # the hardware looping
+                (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+                # disable trig timeout (set to 3 minutes)
+                self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 180.0)
+                # need to re-configure the card since record size was not
+                # known at config
+                self.dig.readRecordsDMA(self._mode, self._nSamples,
+                        n_seq, self._nRecordsPerBuffer,
+                        bConfig=True, bArm=True, bMeasure=False,
+                        maxBuffers=self._nMaxBuffers,
+                        maxBufferSize=self._maxBufferSize)
+             
         else:
             # if not hardware looping, just trigger the card, buffers
             # are already configured
@@ -123,15 +135,24 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # show status before starting acquisition
             self.reportStatus('Digitizer - Waiting for signal')
             # get data
-            self.data = self.dig.readRecordsDMA(self._mode,
-                    self._nSamples, n_seq, self._nRecordsPerBuffer,
-                    bConfig=False, bArm=False, bMeasure=True,
-                    funcStop=self.isStopped,
-                    funcProgress=self._callbackProgress,
-                    firstTimeout=self.dComCfg['Timeout'] + 180.0,
-                    maxBuffers=self._nMaxBuffers,
-                    maxBufferSize=self._maxBufferSize)
-
+            if self._mode.endswith('AWG Hardware Loop'):
+                self.data = self.dig.readRecordsDMA(self._mode,
+                        self._nSamples, self._nRecords, self._nRecordsPerBuffer,
+                        bConfig=False, bArm=False, bMeasure=True,
+                        funcStop=self.isStopped,
+                        funcProgress=self._callbackProgress,
+                        firstTimeout=self.dComCfg['Timeout'] + 180.0,
+                        maxBuffers=self._nMaxBuffers,
+                        maxBufferSize=self._maxBufferSize)
+            else:
+                self.data = self.dig.readRecordsDMA(self._mode,
+                        self._nSamples, n_seq, self._nRecordsPerBuffer,
+                        bConfig=False, bArm=False, bMeasure=True,
+                        funcStop=self.isStopped,
+                        funcProgress=self._callbackProgress,
+                        firstTimeout=self.dComCfg['Timeout'] + 180.0,
+                        maxBuffers=self._nMaxBuffers,
+                        maxBufferSize=self._maxBufferSize)
     def setConfiguration(self):
         """Set digitizer configuration based on driver settings."""
         sampleRateIndex = self.getValueIndex('Sample rate')
@@ -500,6 +521,34 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 return quant.getTraceDict(self.data[name], dt=dt)
             else:
                 raise self._raiseError(name, mode)
+                
+        elif mode == 'Average Buffer Demodulation with AWG Hardware Loop':
+            if name in ('Channel A - Average buffer',
+                        'Channel B - Average buffer'):
+                return quant.getTraceDict(self.data[name].flatten(),
+                                          dt=self._dt)
+            elif name in ('Channel A - Average buffer demodulated values',
+                          'Channel B - Average buffer demodulated values'):
+                if name not in self.data:
+                    self.getDemodulatedValuesFromBuffer()
+                dt = self.getValue('Sequence time step')
+                return quant.getTraceDict(self.data[name], dt=dt)
+            else:
+                raise self._raiseError(name, mode)
+                
+        elif mode == 'Referenced Average Buffer Demodulation with AWG Hardware Loop':
+            if name in ('Channel A - Average buffer',
+                        'Channel B - Average buffer'):
+                return quant.getTraceDict(self.data[name].flatten(),
+                                          dt=self._dt)
+            elif name == 'Channel A - Average buffer demodulated values':
+                if name not in self.data:
+                    self.getDemodulatedValuesFromBuffer()
+                dt = self.getValue('Sequence time step')
+                return quant.getTraceDict(self.data[name], dt=dt)
+            else:
+                raise self._raiseError(name, mode)
+                
         else:
             raise self._raiseError(name, mode)
 
@@ -649,8 +698,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.data['Channel A - Average buffer demodulated values'] = vDemodVal
         else:
             for ch in ('Channel A', 'Channel B'):
-                vCh = self.data['%s - Average buffer record' % ch][:,skip:skip+length]
-                DemodVal = np.dot(vCh, vExp)
+                vCh = self.data['%s - Average buffer' % ch][:,skip:skip+length]
+                vDemodVal = np.dot(vCh, vExp)
                 vDemodVal /= .5 * np.float32(length -1)
                 self.data['%s - Average buffer demodulated values' % ch] = vDemodVal
 
