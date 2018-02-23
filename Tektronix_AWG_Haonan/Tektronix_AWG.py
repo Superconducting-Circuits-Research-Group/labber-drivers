@@ -330,7 +330,7 @@ class Driver(VISA_Driver):
             vIndx = np.nonzero(vU16 != self.lOldU16[iSeq][n])[0]
             if len(vIndx) == 0:
                 # nothing changed, don't update, go on to next
-                self.log('---------channel=%d, nothing changed----------' % (channel))
+                
                 return False
             # some elements changed, find start and length
             start = vIndx[0]
