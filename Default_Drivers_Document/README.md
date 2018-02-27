@@ -10,6 +10,11 @@
 - # of pulses: number of pulses. The pulse can be a square pulse, a ramp pulse or a Gaussian pulse. The pulses can be in the same output or in different outputs.
 
 #-Pulse settings-
--Pulse type: Square, Ramp, Gaussian
--Truncation range: only applies to Gaussian pulses. Truncate the pulse. The duration of the Gaussian pulse is TruncRange * Width + Plateau. See code: dTotTime = truncRange*dWidth + dPlateau
--Edge-to-edge pulses: after checked, increase 'Edge position' to make pulses more isolated from the other ones. The length of actual pulses is EdgePosition * Width + Plateau
+- Pulse type: Square, Ramp, Gaussian
+- Truncation range: only applies to Gaussian pulses. Truncate the pulse. The duration of the Gaussian pulse is TruncRange * Width + Plateau. See code: dTotTime = truncRange*dWidth + dPlateau
+- Edge-to-edge pulses: after checked, increase 'Edge position' to make pulses more isolated from the other ones. The length of actual pulses is EdgePosition * Width + Plateau
+- Use SSB mixing: certain transformation on pulses
+- Use DRAG: certain scaling
+
+#Pulse #1
+- Amplitude:
