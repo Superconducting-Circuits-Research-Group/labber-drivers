@@ -8,9 +8,9 @@
 - Number of outputs: maximum is Four. For each output, there are three channels, Trace-I, Trace-Q, Trace-Gate, that can be sent to the AWG.
 
 ## Sequence
-- \## of pulses: number of pulses used in the sequence. The pulse can be a square pulse, a ramp pulse or a Gaussian pulse. The pulses can be in the same output or in different outputs. (except for the Rabi sequence)
+- \# of pulses: number of pulses used in the sequence. The pulse can be a square pulse, a ramp pulse or a Gaussian pulse. The pulses can be in the same output or in different outputs. (except for the Rabi sequence)
 
-#Pulses
+# Pulses
 ## Pulse settings
 - Pulse type: Square, Ramp, Gaussian
 - Truncation range: only applies to Gaussian pulses. Truncate the pulse. The duration of the Gaussian pulse is TruncRange * Width + Plateau. See code: dTotTime = truncRange * dWidth + dPlateau
@@ -18,9 +18,9 @@
 - Use SSB mixing: certain transformation on pulses
 - Use DRAG: certain scaling
 
-## Pulse ##1
-- Amplitude: amplitude of the pulse ##1
-- Width: the width of the pulse ##1
+## Pulse #1
+- Amplitude: amplitude of the pulse #1
+- Width: the width of the pulse #1
 - Plateau: determines how long the maximum of the pulse will last
 - Spacing: time interval between this pulse and the next pulse. Changing spacing will move the positions of pulse ##2, ##3, ...
 - Phase: roughly speaking, the amplitude for trace-I is Amplitude * Cos(Phase) and the amplitude for trace-Q is Amplitude * Sin(Phase)
@@ -55,4 +55,4 @@
 - Uniform gate: if checked, gate pulses will cover almost the whole waveform for each output
 - Gate delay: (for non-uniform gate) the time interval between the gate pulse and the output pulse
 - Gate overlap: (for non-uniform gate) to increase the width of the gate pulse. If overlap is 0, the gate will have the same width as the pulse does.
-- Minimal gate time: 
+- Minimal gate time: (for non-uniform gate) This should be "Minimal gap time"? If the gap time between two gates is less than this value, the gap will be filled up.
