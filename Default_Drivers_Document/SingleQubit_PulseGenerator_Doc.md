@@ -1,10 +1,10 @@
 # Single Qubit Experiment Manual
 ## T_1 measurement
 1. Set sequence to be 'Rabi'. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. 
-2. If you want to fix the \pi pulse and move the readout pulse in each circle, turn off 'Trim waveform to sequence'. If not, turn on 'Trim waveform to sequence' and then turn on 'Buffer start to restore size'.
+2. If you want to fix the $\pi$ pulse and move the readout pulse in each circle, turn off 'Trim waveform to sequence'. If not, turn on 'Trim waveform to sequence' and then turn on 'Buffer start to restore size'.
 3. Set 'Number of outputs' to be 'One'
 4. Set the parameters in 'Pulse settings' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', 'Truncation range' = 2, turn off 'Edge-to-edge pulses', 'Use SSB mixing', 'Use DRAG'.
-5. Pulse #1 will be the \pi pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the \pi pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T_1 measurement, typically only pulse #1 will be used).
+5. Pulse #1 will be the $\pi$ pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the $\pi$ pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T_1 measurement, typically only pulse #1 will be used).
 6. Turn off 'Generate tomography pulse'. Turn on 'Generate readout' and set 'Readout amplitude', 'Readout duration' properly. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'
 
 # Common parameters
@@ -32,16 +32,16 @@
 - Amplitude: amplitude of the pulse #1
 - Width: the width of the pulse #1
 - Plateau: determines how long the maximum of the pulse will last
-- Spacing: time interval between this pulse and the next pulse. Changing spacing will move the positions of pulse ##2, ##3, ...
+- Spacing: time interval between this pulse and the next pulse. Changing spacing will move the positions of pulse #2, #3, ...
 - Phase: roughly speaking, the amplitude for trace-I is Amplitude * Cos(Phase) and the amplitude for trace-Q is Amplitude * Sin(Phase)
 - Output: assign the pulse to certain output. The output with more than one pulses is a summation of these pulses.
 
 ## Readout
 ### state tomography
-- Generate tomography pulse: generate tomography pulses if checked. The pulses will be \pi/2 rotations 
+- Generate tomography pulse: generate tomography pulses if checked. The pulses will be $\pi$/2 rotations 
 - State index: state index is cycled. If StateIndex % 3 = 0, the pulse is empty (z measurement). If StateIndex % 3 = 1, the pulse is an X(or Y) rotation (y(or x) measurement). If StateIndex % 3 = 2, the pulse is an Y(or X) rotation (x(or y) measurement) 
 - Tomography delay: the time interval between the tomography pulse and other pulses
-- Definition, pi/2 pulse: use a pulse to define the tomography \pi/2 pulse. The tomography pulse will have the same shape and output channel as the selected pulse do.
+- Definition, pi/2 pulse: use a pulse to define the tomography $\pi$/2 pulse. The tomography pulse will have the same shape and output channel as the selected pulse do.
 
 ### Readout
 - Generate readout: generate readout pulse if checked. The pulse will be in the Trace-Readout channel
