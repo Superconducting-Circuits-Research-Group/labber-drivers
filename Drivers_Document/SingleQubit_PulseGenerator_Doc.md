@@ -1,11 +1,13 @@
 # Single Qubit Experiment Manual
-## T_1 measurement
+## T1 measurement
 1. Set sequence to be 'Rabi'. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. 
-2. If you want to fix the $\pi$ pulse and move the readout pulse in each circle, turn off 'Trim waveform to sequence'. If not, turn on 'Trim waveform to sequence' and then turn on 'Buffer start to restore size'.
+2. If you want to fix the pi pulse and move the readout pulse in each circle, turn off 'Trim waveform to sequence'. If not, turn on 'Trim waveform to sequence' and then turn on 'Buffer start to restore size'.
 3. Set 'Number of outputs' to be 'One'
 4. Set the parameters in 'Pulse settings' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', 'Truncation range' = 2, turn off 'Edge-to-edge pulses', 'Use SSB mixing', 'Use DRAG'.
-5. Pulse #1 will be the $\pi$ pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the $\pi$ pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T_1 measurement, typically only pulse #1 will be used).
-6. Turn off 'Generate tomography pulse'. Turn on 'Generate readout' and set 'Readout amplitude', 'Readout duration' properly. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'
+5. Pulse #1 will be the pi pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the pi pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T1 measurement, typically only pulse #1 will be used).
+6. Turn off 'Generate tomography pulse'. Turn on 'Generate readout' and set 'Readout amplitude', 'Readout duration' properly. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'. Turn off 'Sample-and-hold readout'.
+7. Turn off 'Swap IQ', 'Add pre-pulses'. Turn off 'Generate gate'.
+8. In 'Signal connections', set 'Trace - I' to be the source for 'Ch1' of 'AWG - Haonan'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3' and 'Ch4' as the trigger ... to be continued
 
 # Common parameters
 ## Waveform
@@ -38,10 +40,10 @@
 
 ## Readout
 ### state tomography
-- Generate tomography pulse: generate tomography pulses if checked. The pulses will be $\pi$/2 rotations 
+- Generate tomography pulse: generate tomography pulses if checked. The pulses will be pi/2 rotations 
 - State index: state index is cycled. If StateIndex % 3 = 0, the pulse is empty (z measurement). If StateIndex % 3 = 1, the pulse is an X(or Y) rotation (y(or x) measurement). If StateIndex % 3 = 2, the pulse is an Y(or X) rotation (x(or y) measurement) 
 - Tomography delay: the time interval between the tomography pulse and other pulses
-- Definition, pi/2 pulse: use a pulse to define the tomography $\pi$/2 pulse. The tomography pulse will have the same shape and output channel as the selected pulse do.
+- Definition, pi/2 pulse: use a pulse to define the tomography pi/2 pulse. The tomography pulse will have the same shape and output channel as the selected pulse do.
 
 ### Readout
 - Generate readout: generate readout pulse if checked. The pulse will be in the Trace-Readout channel

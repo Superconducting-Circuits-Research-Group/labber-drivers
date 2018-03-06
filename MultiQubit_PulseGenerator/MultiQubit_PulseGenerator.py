@@ -36,7 +36,7 @@ class Driver(LabberDriver):
         """Perform the Set Value instrument operation."""
         # only do something here if changing the sequence type
         if quant.name == 'Sequence':
-            value = quant.getValue()
+            # value = quant.getValue()
             # create new sequence if sequence type changed
             new_type = SEQUENCES[value]
 
