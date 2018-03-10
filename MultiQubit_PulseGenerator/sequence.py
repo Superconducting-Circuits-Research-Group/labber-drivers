@@ -532,8 +532,9 @@ class Sequence(object):
                 wave = self.readout.create_waveform(t_start=t)
             # if not matching wave sizes, simply replace initialized waveform
             if not self.readout.match_main_size:
-                self.readout_iq = wave
+                self.readout_iq[i0:i0 + len(wave)] = wave
             else:
+                log.info('len(self.readout_iq)=%s' % len(self.readout_iq))
                 i1 = min(len(self.readout_iq), i0 + len(wave))
                 self.readout_iq[i0:i1] = wave[:(i1 - i0)]
             # add IQ offsets
