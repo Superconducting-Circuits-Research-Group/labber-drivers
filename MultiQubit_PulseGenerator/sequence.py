@@ -510,36 +510,38 @@ class Sequence(object):
             t = self.find_range_of_sequence()[1] + self.readout_delay
             i0 = int(round(t * self.sample_rate))
         # start with readout trig signal
-        if self.generate_readout_trig:
-            # create trig waveform directly
-            i1 = min(int(round((t + self.readout_duration) * self.sample_rate)),
-                     len(self.readout_trig) - 1)
-            self.readout_trig[i0:i1] = self.readout_amplitude
+        if i0<len(self.readout_iq):
+            if self.generate_readout_trig:
+                # create trig waveform directly
+                i1 = min(int(round((t + self.readout_duration) * self.sample_rate)),
+                         len(self.readout_trig) - 1)
+                self.readout_trig[i0:i1] = self.readout_amplitude
 
-            # # create pulse object and insert into trig waveform
-            # trig = Pulse(amplitude=self.readout_amplitude,
-            #              width=0.0,
-            #              plateau=self.readout_duration,
-            #              shape=PulseShape.SQUARE)
-            # self.add_single_pulse(self.readout_trig, trig, t, align_left=True)
+                # # create pulse object and insert into trig waveform
+                # trig = Pulse(amplitude=self.readout_amplitude,
+                #              width=0.0,
+                #              plateau=self.readout_duration,
+                #              shape=PulseShape.SQUARE)
+                # self.add_single_pulse(self.readout_trig, trig, t, align_left=True)
 
-        # readout I/Q waveform
-        if self.generate_readout_iq:
-            # ignore readout timestamp if pulses are aligned to end of waveform
-            if self.align_to_end:
-                wave = self.readout.create_waveform(t_start=0.0)
-            else:
-                wave = self.readout.create_waveform(t_start=t)
-            # if not matching wave sizes, simply replace initialized waveform
-            if not self.readout.match_main_size:
-                self.readout_iq[i0:i0 + len(wave)] = wave
-            else:
-                log.info('len(self.readout_iq)=%s' % len(self.readout_iq))
-                i1 = min(len(self.readout_iq), i0 + len(wave))
-                self.readout_iq[i0:i1] = wave[:(i1 - i0)]
-            # add IQ offsets
-            self.readout_iq.real += self.i_offset
-            self.readout_iq.imag += self.q_offset
+            # readout I/Q waveform
+            if self.generate_readout_iq:
+                # ignore readout timestamp if pulses are aligned to end of waveform
+                if self.align_to_end:
+                    wave = self.readout.create_waveform(t_start=0.0)
+                else:
+                    wave = self.readout.create_waveform(t_start=t)
+                # if not matching wave sizes, simply replace initialized waveform
+                if not self.readout.match_main_size:
+                    self.readout_iq[i0:i0 + len(wave)] = wave
+                else:
+                    i1 = min(len(self.readout_iq), i0 + len(wave))
+                    log.info('i1-i0=%d, len(self.readout_iq)=%d, i0+len(wave)=%d' % (i1-i0,len(self.readout_iq),i0+len(wave)))
+                    log.info('len(wave[:(i1 - i0)])=%d,len(self.readout_iq[i0:i1])=%d' % (len(wave[:(i1 - i0)]),len(self.readout_iq[i0:i1])))
+                    self.readout_iq[i0:i1] = wave[:(i1 - i0)]
+                # add IQ offsets
+                self.readout_iq.real += self.i_offset
+                self.readout_iq.imag += self.q_offset
 
 
     def add_microwave_gate(self, config):

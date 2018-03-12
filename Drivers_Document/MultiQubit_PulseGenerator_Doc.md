@@ -1,6 +1,14 @@
-# Single Qubit Experiment Manual
+# Multi Qubit Experiment Manual
+Note: there is a bug that you can not set the sequence unless you 'Start Measurement' or 'Stop' the instrument first.
 ## T1 measurement
-
+1. Set sequence to be 'CP/CPMG'. Set 'Number of qubits' to be 1 (single qubi case), 'Local XY' to be True. 'Pulse period' won't be used. Set '# of pi pulses' to be -1 (This stands for 'T1 measurement'), 'Sequence duration' to be 0. 'Add pi pulses to Q', 'Edge-to-edge pulses' won't be used.
+2. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. If you want to fix the pi pulse and move the readout pulse in each circle, turn off 'Align pulses to end of waveform'. If not, turn it on (Then 'First pulse delay' won't affect the sequence unless it is very small).
+3. Set 'Number of outputs' to be 'One'
+4. Set the parameters in 'Pulse settings' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', 'Truncation range' = 2, turn off 'Edge-to-edge pulses', 'Use SSB mixing', 'Use DRAG'.
+5. Pulse #1 will be the pi pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the pi pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T1 measurement, typically only pulse #1 will be used).
+6. Turn off 'Generate tomography pulse'. Turn on 'Generate readout' and set 'Readout amplitude', 'Readout duration' properly. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'. Turn off 'Sample-and-hold readout'.
+7. Turn off 'Swap IQ', 'Add pre-pulses'. Turn off 'Generate gate'.
+8. In 'Signal connections', set 'Trace - I' to be the source for 'Ch1' of 'AWG - Haonan'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3' and 'Ch4' as the trigger ... to be continued
 
 # Common parameters
 ## Sequence
@@ -13,6 +21,12 @@
 
 ### Rabi
 - Uniform pulse amplitude for all qubits: If True, the amplitude of pulse #1 will be used for all qubits
+
+### CPMG
+- # of pi pulses: if -1, only one pi pulse (T1 experiment); if 0, only two pi/2 pulses (Ramsey experiment); if 1, one pi pulse sandwiched by two pi/2 pulses (Echo experiment); if more than one, number of pi pulses between the two pi/2 pulses. The pi pulses are defined in section '1-QB gates'. In that section, different pulses represent pi pulses for different qubits. pi/2 pulses have half the amplitudes.
+- Sequence duration: the time interval between two pi/2 pulses. If it is T1 experiment, increasing 'Sequence duration' moves readout pulse further from the pi pulse. If 'Sequence duration' is too small, the pi/2 pulses and the pi pulses will be added together.
+- Add pi pulses to Q: the added pi pulse will be in 'Trace - Q' channel
+- Edge-to-edge pulses: increase the time interval for pi pulses if it has non-zero plateau or truncation range (for Gaussian pulses).
 
 ## Waveform
 ### Waveform

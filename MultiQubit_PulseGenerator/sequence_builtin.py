@@ -40,9 +40,9 @@ class CPMG(Sequence):
         pi_to_q = config['Add pi pulses to Q']
         duration = config['Sequence duration']
         edge_to_edge = config['Edge-to-edge pulses']
-        if self.pulses_1qb[0].shape != PulseShape.SQUARE:  # non-square pulses
+        if self.pulses_1qb[0].shape == PulseShape.GAUSSIAN:  # Gaussian pulses
             truncation = config['Truncation range']
-        else:  # square pulses
+        else:  # Non-Gaussian pulses
             truncation = 0.0
         # center pulses in add_gates mode; ensure sufficient pulse spacing in CPMG mode
         t0 = self.first_delay + (self.pulses_1qb[0].width*2*truncation + self.pulses_1qb[0].plateau)*0.5
@@ -80,6 +80,7 @@ class CPMG(Sequence):
                 period = duration / n_pulse
                 time_pi = (t0 + width + 0.5 * period +
                            (period + width) * np.arange(n_pulse))
+                log.info('period =%d' % period)
             # add pi pulses, one by one
             for t in time_pi:
                 self.add_single_gate(n, gate_pi, t)
