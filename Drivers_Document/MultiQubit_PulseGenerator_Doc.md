@@ -1,14 +1,22 @@
 # Multi Qubit Experiment Manual
-Note: there is a bug that you can not set the sequence unless you 'Start Measurement' or 'Stop' the instrument first.
+
 ## T1 measurement
 1. Set sequence to be 'CP/CPMG'. Set 'Number of qubits' to be 1 (single qubi case), 'Local XY' to be True. 'Pulse period' won't be used. Set '# of pi pulses' to be -1 (This stands for 'T1 measurement'), 'Sequence duration' to be 0. 'Add pi pulses to Q', 'Edge-to-edge pulses' won't be used.
-2. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. If you want to fix the pi pulse and move the readout pulse in each circle, turn off 'Align pulses to end of waveform'. If not, turn it on (Then 'First pulse delay' won't affect the sequence unless it is very small).
-3. Set 'Number of outputs' to be 'One'
-4. Set the parameters in 'Pulse settings' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', 'Truncation range' = 2, turn off 'Edge-to-edge pulses', 'Use SSB mixing', 'Use DRAG'.
-5. Pulse #1 will be the pi pulse. Set the 'Amplitude', 'Width', 'Phase' according to the shape of the pi pulse. Set 'Plateau', 'Spacing' to be 0. Don't need to set the parameters for other pulses (In T1 measurement, typically only pulse #1 will be used).
-6. Turn off 'Generate tomography pulse'. Turn on 'Generate readout' and set 'Readout amplitude', 'Readout duration' properly. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'. Turn off 'Sample-and-hold readout'.
-7. Turn off 'Swap IQ', 'Add pre-pulses'. Turn off 'Generate gate'.
-8. In 'Signal connections', set 'Trace - I' to be the source for 'Ch1' of 'AWG - Haonan'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3' and 'Ch4' as the trigger ... to be continued
+2. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. If you want to fix the pi pulse and move the readout pulse in each circle, turn off 'Align pulses to end of waveform'. If not, turn it on (Then 'First pulse delay' won't affect the sequence unless it is very small). Turn off 'Trim waveform to sequence'
+3. Set the parameters in '1-QB gates' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', turn off 'Use DRAG', turn on 'Uniform pulse shape'.
+4. Pulse #1 will be the pi pulse. Set the 'Width', 'Amplitude' according to the shape of the pi pulse. Set 'Plateau', 'Frequency' to be 0. Don't need to set the parameters for other pulses (In T1 measurement, typically only pulse #1 will be used).
+5. '2-QB gates', 'Tomography', 'Predistortion', 'Cross-talk' won't be used.
+6. Turn on 'Generate readout trig'. Set 'Readout trig amplitude' to be 0.5V. Set 'Readout trig duration' to be 1e-6s. Turn on 'Generate readout waveform'. Set 'Number of readout tones' to be 1. Set 'Readout amplitude' = 0.5V, 'Readout duration' = 1e-5s. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'.
+7. 'Match main sequence waveform size' won't be used. Set 'Readout frequency #1' = 0. Other frequencies won't be used. Turn off 'Distribute readout phases'. Set 'Readout I/Q ratio' = 1, 'Offset I' = 0, 'Offset Q' = 0, 'IQ skew' = 0. Turn off 'Predistort readout waveform'.
+8. In 'Signal connections', set 'Trace - I1' to be the source for 'Ch1' of 'AWG - Haonan'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3'. Set 'Trace - Readout trig' to be the source for 'Ch3 - Marker 1' as the trigger.
+9. In 'Step sequence', set all the other parameters. Note: 
+	- 'AlazarTech Signal Demodulatior' 
+		- 'Records per buffer' = the number of step points. 
+		- 'Trigger level' = 450mV.
+		- 'Sequence time step' = the step of the 'Readout delay'.
+		- 'Acquisition mode' = 'Referenced Average Buffer Demodulation with AWG Hardware Loop' 
+	- 'Tektronix AWG - Haonan'
+		- 'Run mode' = 'Sequence'
 
 # Common parameters
 ## Sequence
