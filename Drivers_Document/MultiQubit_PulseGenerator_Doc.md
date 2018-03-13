@@ -31,7 +31,7 @@
 - Uniform pulse amplitude for all qubits: If True, the amplitude of pulse #1 will be used for all qubits
 
 ### CPMG
-- # of pi pulses: if -1, only one pi pulse (T1 experiment); if 0, only two pi/2 pulses (Ramsey experiment); if 1, one pi pulse sandwiched by two pi/2 pulses (Echo experiment); if more than one, number of pi pulses between the two pi/2 pulses. The pi pulses are defined in section '1-QB gates'. In that section, different pulses represent pi pulses for different qubits. pi/2 pulses have half the amplitudes.
+- \# of pi pulses: if -1, only one pi pulse (T1 experiment); if 0, only two pi/2 pulses (Ramsey experiment); if 1, one pi pulse sandwiched by two pi/2 pulses (Echo experiment); if more than one, number of pi pulses between the two pi/2 pulses. The pi pulses are defined in section '1-QB gates'. In that section, different pulses represent pi pulses for different qubits. pi/2 pulses have half the amplitudes.
 - Sequence duration: the time interval between two pi/2 pulses. If it is T1 experiment, increasing 'Sequence duration' moves readout pulse further from the pi pulse. If 'Sequence duration' is too small, the pi/2 pulses and the pi pulses will be added together.
 - Add pi pulses to Q: the added pi pulse will be in 'Trace - Q' channel
 - Edge-to-edge pulses: increase the time interval for pi pulses if it has non-zero plateau or truncation range (for Gaussian pulses).
