@@ -52,6 +52,7 @@ class Driver(VISA_Driver):
         # init vectors with old values
         self.bWaveUpdated = False
         self.bLengthUpdate = True
+        self.bFastSeq = False
         self.nOldLength = 0
         self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
@@ -118,6 +119,8 @@ class Driver(VISA_Driver):
                     sOutput += (':OUTP%d:STAT 1;' % (n+1))
             if sOutput != '':
                 self.writeAndLog(sOutput)
+        elif quant.name == 'Fast Sequence Transfer':
+            quant.setValue(value)
         else:
             # for all other cases, call VISA driver
             value = VISA_Driver.performSetValue(self, quant, value, sweepRate,
@@ -125,6 +128,7 @@ class Driver(VISA_Driver):
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+            self.bFastSeq = self.getValue('Fast Sequence Transfer')
             if self.isHardwareLoop(options):
                 seq = seq_no
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
@@ -142,7 +146,7 @@ class Driver(VISA_Driver):
                           'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
                           'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
                           'Ch 3 - Marker 1', 'Ch 3 - Marker 2',
-                          'Ch 4 - Marker 1', 'Ch 4 - Marker 2'):
+                          'Ch 4 - Marker 1', 'Ch 4 - Marker 2','Fast Sequence Transfer'):
             # do nothing here
             value = quant.getValue()
         else:
@@ -157,15 +161,18 @@ class Driver(VISA_Driver):
         self.nPrevData = 0
         self.bIsStopped = False
         bWaveUpdate = False
-        # go through all channels
-        for n in range(self.nCh):
-            # channels are numbered 1-4
-            channel = n+1
-            vData = self.getValueArray('Ch %d' % channel)
-            vMark1 = self.getValueArray('Ch %d - Marker 1' % channel)
-            vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
-            bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
-            self.log('bWaveUpdate=%s' % bWaveUpdate)            
+        if self.bFastSeq:
+            self.decomposeWaveformAndSendFragments(seq)
+        else:
+            # go through all channels
+            for n in range(self.nCh):
+                # channels are numbered 1-4
+                channel = n+1
+                vData = self.getValueArray('Ch %d' % channel)
+                vMark1 = self.getValueArray('Ch %d - Marker 1' % channel)
+                vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
+                bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
+                # self.log('bWaveUpdate=%s' % bWaveUpdate)             
         # check if sequence mode
         if seq is not None:
             # if not final seq call, just return here
@@ -179,11 +186,16 @@ class Driver(VISA_Driver):
                 self.writeAndLog('SEQ:LENG 0')
                 self.writeAndLog('SEQ:LENG %d' % n_seq)
                 for n1 in range(n_seq):
-                    for n2, bUpdate in enumerate(self.lInUse):
-                        if bUpdate:
-                            name = 'Labber_%d_%d' % (n2+1, n1+1)
-                            self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
-                                             (n1+1, n2+1, name))
+                    if self.bFastSeq:
+                        name = 'LabberSubSeq_%d' % (n1+1)
+                        self.writeAndLog('SEQ:ELEM%d:SUBS "%s"' % \
+                                     (n1+1, name)) 
+                    else:                
+                        for n2, bUpdate in enumerate(self.lInUse):
+                            if bUpdate:
+                                name = 'Labber_%d_%d' % (n2+1, n1+1)
+                                self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
+                                                 (n1+1, n2+1, name))
                     # don't wait for trigger 
                     self.writeAndLog('SEQ:ELEM%d:TWA 0' % (n1+1))
                 # for last element, set jump to first
@@ -261,19 +273,24 @@ class Driver(VISA_Driver):
         by the channel nunber"""
         if seq is None:
             name = 'Labber_%d' % channel
+        elif self.bFastSeq:
+            name = 'LabberSubSeq_%d' % (seq+1)
         else:
             name = 'Labber_%d_%d' % (channel, seq+1)
-        # first, turn off output
+        # first, off output
         self.writeAndLog(':OUTP%d:STAT 0;' % channel)
         if bOnlyClear:
             # just clear this channel
             self.writeAndLog(':SOUR%d:WAV ""' % channel)
         else:
-            # remove old waveform, ignoring errors, then create new
-            self.writeAndLog(':WLIS:WAV:DEL "%s"; *CLS' % name, bCheckError=False)
-            self.writeAndLog(':WLIS:WAV:NEW "%s",%d,INT;' % (name, length))
+            if self.bFastSeq:
+                self.writeAndLog(':SLIST:SUBS:NEW "%s",%d;' % (name, length))
+            else:
+                # remove old waveform, ignoring errors, then create new
+                self.writeAndLog(':WLIS:WAV:DEL "%s"; *CLS' % name, bCheckError=False)
+                self.writeAndLog(':WLIS:WAV:NEW "%s",%d,INT;' % (name, length))
 
-
+                
     def sendWaveformToTek(self, channel, vData, vMark1, vMark2, seq=None):
         """Send waveform to Tek"""
         # check if sequence
@@ -364,8 +381,55 @@ class Driver(VISA_Driver):
         # store new waveform for next call
         self.lOldU16[iSeq][n] = vU16
         return True
+       
+       
+    def decomposeWaveformAndSendFragments(self, seq)
+    
+        for n in range(self.nCh):
+            # channels are numbered 1-4
+            channel = n + 1
+            vData = self.getValueArray('Ch %d' % channel)
+            vMark1 = self.getValueArray('Ch %d - Marker 1' % channel)
+            vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
+            if channel == 1:
+                mDataMark = np.zeros((len(vData), 4 * 3), dtype=float)
+            mDataMark[:, 3 * n] = vData
+            mDataMark[:, 3 * n + 1] = vMark1
+            mDataMark[:, 3 * n + 2] = vMark2
+        # find the zero points and non-zero points in a sequence. Because the 'repeat' function on AWG can not repeat different channels separately, all the channels should be considered together when trying to use 'repeat'.
+        vNonzero = np.array(np.any(mDataMark != 0, axis = 1), dtype=int)
+        vDiff = np.diff(vNonzero)
+        vUp = np.nonzero(vDiff > 0)[0]
+        NumFrag = 2 * len(vUp) + 1 #for first and last elements are 0
+        if vNonzero[0] != 0:
+            vUp = np.concatenate(([0], vUp))
+            NumFrag -= 1
+        vDown = np.nonzero(vDiff < 0)[0]
+        if vNonzero[-1] > 0:
+            vDown = np.concatenate((vDown, [len(vNonzero)]))
+            NumFrag -= 1
+        mComposition = np.empty((NumFrag, 3 * 4))
+        for nC in range(self.nCh):
+            for nF in range(NumFrag):
+                start = vUp[nF]
+                end = vDown[nF]
+                #pick up from the 'start' element to 'end - 1' element
+                ThisPulse = mDataMark[start:end, nC]
+                if np.all(ThisPulse == 0)
+                bWaveUpdate = self.createAndSendFragment(ThisPulse, name) or bWaveUpdate
+                mComposition[nF,nC] = name
+            
+        bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
         
-
-
+    return (bWaveUpdate, mComposition)
+    
+    def createAndSendFragment(self, vFragment, name)
+        
+        return bWaveUpdate
+    
+    def assembleSubsequence(self, )
+    
+    
+    
 if __name__ == '__main__':
     pass
