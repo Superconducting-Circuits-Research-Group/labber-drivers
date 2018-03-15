@@ -502,15 +502,15 @@ class Sequence(object):
 
 
     def generate_readout(self):
-        """Create read-out trig and waveform signals
-
-        """
-        # get positon of readout
+        """Create readout trigger and waveform signals."""
+        # get position of readout
         if self.generate_readout_trig or self.generate_readout_iq:
             t = self.find_range_of_sequence()[1] + self.readout_delay
             i0 = int(round(t * self.sample_rate))
-        # start with readout trig signal
-        if i0<len(self.readout_iq):
+
+            if i0 > len(self.readout_iq):
+                return
+                
             if self.generate_readout_trig:
                 # create trig waveform directly
                 i1 = min(int(round((t + self.readout_duration) * self.sample_rate)),

@@ -1,22 +1,23 @@
 # Multi Qubit Experiment Manual
 
 ## T1 measurement
-1. Set sequence to be 'CP/CPMG'. Set 'Number of qubits' to be 1 (single qubi case), 'Local XY' to be True. 'Pulse period' won't be used. Set '# of pi pulses' to be -1 (This stands for 'T1 measurement'), 'Sequence duration' to be 0. 'Add pi pulses to Q', 'Edge-to-edge pulses' won't be used.
-2. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. If you want to fix the pi pulse and move the readout pulse in each circle, turn off 'Align pulses to end of waveform'. If not, turn it on (Then 'First pulse delay' won't affect the sequence unless it is very small). Turn off 'Trim waveform to sequence'
-3. Set the parameters in '1-QB gates' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' = 'Square', turn off 'Use DRAG', turn on 'Uniform pulse shape'.
-4. Pulse #1 will be the pi pulse. Set the 'Width', 'Amplitude' according to the shape of the pi pulse. Set 'Plateau', 'Frequency' to be 0. Don't need to set the parameters for other pulses (In T1 measurement, typically only pulse #1 will be used).
+1. Set sequence to be 'CP/CPMG'. Set 'Number of qubits' to be 1 (single qubit case), 'Local XY' to be True. 'Pulse period' won't be used. Set '# of pi pulses' to be -1 (This stands for 'T1 measurement'), 'Sequence duration' to be 0. 'Add pi pulses to Q', 'Edge-to-edge pulses' won't be used.
+2. Set 'Sample rate', 'Number of points', 'First pulse delay' properly. If you want to fix the pi pulse and move the readout pulse for each
+waveform in a sequence, turn off 'Align pulses to end of waveform'. If not, turn it on. In this case, 'First pulse delay' won't affect the sequence unless it is very small. Turn off 'Trim waveform to sequence'.
+3. Set the parameters in '1-QB gates' properly. For detailed explanation, see 'Common parameters' below. Typical settings: 'Pulse type' is 'Square', 'Use DRAG' is off, 'Uniform pulse shape' is on.
+4. Pulse #1 will be the pi pulse. Set the 'Width', 'Amplitude' according to the shape of the pi pulse. Set 'Plateau', 'Frequency' to be 0. Don't need to set the parameters for other pulses: in T1 measurement, only pulse #1 is used.
 5. '2-QB gates', 'Tomography', 'Predistortion', 'Cross-talk' won't be used.
 6. Turn on 'Generate readout trig'. Set 'Readout trig amplitude' to be 0.5V. Set 'Readout trig duration' to be 1e-6s. Turn on 'Generate readout waveform'. Set 'Number of readout tones' to be 1. Set 'Readout amplitude' = 0.5V, 'Readout duration' = 1e-5s. Set 'Readout delay' as the step parameter in 'Step sequence' list in 'Measurement Editor'.
-7. 'Match main sequence waveform size' won't be used. Set 'Readout frequency #1' = 0. Other frequencies won't be used. Turn off 'Distribute readout phases'. Set 'Readout I/Q ratio' = 1, 'Offset I' = 0, 'Offset Q' = 0, 'IQ skew' = 0. Turn off 'Predistort readout waveform'.
-8. In 'Signal connections', set 'Trace - I1' to be the source for 'Ch1' of 'AWG - Haonan'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3'. Set 'Trace - Readout trig' to be the source for 'Ch3 - Marker 1' as the trigger.
+7. 'Match main sequence waveform size' should be on. Set 'Readout frequency #1' = 0. Other frequencies are irrelevant. Turn off 'Distribute readout phases'. Set 'Readout I/Q ratio' = 1, 'Offset I' = 0, 'Offset Q' = 0, 'IQ skew' = 0. Turn off 'Predistort readout waveform'.
+8. In 'Signal connections', set 'Trace - I1' to be the source for 'Ch1' of 'Tektronix AWG'. If 'Phase' for pulse #1 is non-zero, set 'Trace - Q' to be the source for 'Ch2'. Set 'Trace - Readout' to be the source for 'Ch3'. Set 'Trace - Readout trig' to be the source for 'Ch3 - Marker 1' as the trigger.
 9. In 'Step sequence', set all the other parameters. Note: 
-	- 'AlazarTech Signal Demodulatior' 
+	- 'AlazarTech Signal Demodulator' 
 		- 'Records per buffer' = the number of step points. 
 		- 'Trigger level' = 450mV.
 		- 'Sequence time step' = the step of the 'Readout delay'.
 		- 'Acquisition mode' = 'Referenced Average Buffer Demodulation with AWG Hardware Loop' 
-	- 'Tektronix AWG - Haonan'
-		- 'Run mode' = 'Sequence'
+	- 'Tektronix AWG'
+		- 'Run mode' = 'Sequence'.
 
 # Common parameters
 ## Sequence
