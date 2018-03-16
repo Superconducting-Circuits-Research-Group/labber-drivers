@@ -42,7 +42,7 @@ waveform in a sequence, turn off 'Align pulses to end of waveform'. If not, turn
 - Sample rate: xxx samples per second
 - Number of points: number of samples
 - First pulse delays[s]: the time interval between the center of the pulse and the start of the output
-- Trim waveform to sequence: send the waveform from the first point to the last non-zero point
+- Trim waveform to sequence: send the waveform from the first point to the last non-zero point. But it doesn't trim the readout waveform.
 - Trim both start and end: send the waveform from the first non-zero point to the last non-zero point
 - Align pulses to end of waveform: If Ture, the pulse will be at the end of the waveform regardless of 'First pulse delays', unless it is very large or negative.
 
@@ -91,7 +91,7 @@ Remians to be done. Don't use.
 - Uniform readout amplitude: if True, assign the same amplitude for all tones
 - Readout duration: the width of the readout pulse
 - Readout delay: the time interval between the readout pulse and the last pulse.
-- Match main sequence waveform size: I think it is useless. (For the version downloaded from Github, there was a bug that if this option is False, the readout waveform will start from t=0.)
+- Match main sequence waveform size: if False, the readout waveform will be independent on the position of the other pulses. Otherwise the readout waveform will follow the readout trigger. If 'Trim waveform to sequence' is True but this option is False, the readout waveform isn't tirmmed.
 - Readout frequency: the frequency of that tone
 - Readout amplitude: the amplitude of that tone
 
