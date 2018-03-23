@@ -187,6 +187,7 @@ class Driver(VISA_Driver):
                 self.writeAndLog('SEQ:LENG %d' % n_seq)
                 for n1 in range(n_seq):
                     if self.bFastSeq:
+                    #need modification
                         name = 'LabberSubSeq_%d' % (n1+1)
                         self.writeAndLog('SEQ:ELEM%d:SUBS "%s"' % \
                                      (n1+1, name)) 
@@ -383,8 +384,8 @@ class Driver(VISA_Driver):
         return (True, vData)
     
     
-    def checkWaveformLengthBeforeSending(self, channel, vData, vMark1, vMark2, seq=None):
-        """Check waveform before sending to Tek"""
+    def checkWaveformLengthBeforeSending(self, channel, vData, vMark1, vMark2, seq):
+        """Check waveform before sending to Tek. Similar to the method self.sendWaveformToTek(), but not the same. This is for fast sequence transfer"""
         # check if sequence
         if seq is None:
             iSeq = 0
@@ -399,7 +400,7 @@ class Driver(VISA_Driver):
                     self.createWaveformOnTek(channel, 0, seq, bOnlyClear=True)
                     self.lOldU16[iSeq][n] = np.array([], dtype=np.uint16)
                     self.lInUse[n] = False
-                return False
+                return (False, [])
             else:
                 # no data, but markers exist, output zeros for data
                 nMark = max(len(vMark1), len(vMark2))
@@ -408,21 +409,38 @@ class Driver(VISA_Driver):
                 if len(vMark2) == 0:
                     vMark2 = np.zeros((nMark,), dtype=float)    
                 vData = np.zeros((nMark,), dtype=float)
+                mDataMark = np.array([vData, vMark1, vMark2])
         # make sure length of data is the same
-        if (len(vMark1)>0 and len(vData)!=len(vMark1)) or \
-           (len(vMark2)>0 and len(vData)!=len(vMark2)) or \
+        if (len(vData)!=len(vMark1)) or \
+           (len(vData)!=len(vMark2)) or \
            (self.nPrevData>0 and len(vData)!=self.nPrevData):        
             raise InstrumentDriver.Error(\
                   'All channels need to have the same number of elements')
         self.nPrevData = len(vData)
+        self.nOldLength = len(vData)
         # channel in use, mark
         self.lInUse[n] = True
-        return True
-        
-       
+        return (True, mDataMark)
+           
+    
+    def scaleWaveformAndMarkerToU16(vData, vMark1, vMark2, channel)
+
+        # get range and scale to U16
+        Vpp = self.getValue('Ch%d - Range' % channel)
+        vU16 = self.scaleWaveformToU16(vData, Vpp, channel)
+        # check for marker traces
+        for m, marker in enumerate([vMark1, vMark2]):
+            if len(marker)==len(vU16):
+                # get marker trace
+                vMU16 = np.array(marker != 0, dtype=np.uint16)
+                # add marker trace to data trace, with bit shift
+                vU16 += 2**(14+m) * vMU16
+        return vU16
+    
     def decomposeWaveformAndSendFragments(self, seq):
         """"decompose the waveform into fragments (to assemble a subsequence)"""
-        mDataMark = 0 #initial value
+        mDataMarkTot = 0 #initial value
+        lValidChannel = []
         for n in range(self.nCh):
             # channels are numbered 1-4
             channel = n + 1
@@ -431,48 +449,61 @@ class Driver(VISA_Driver):
             vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
             
             # similar process in self.sendWaveformToTek
-            bValidChannel, vData = self.checkWaveformLengthBeforeSending(channel, vData, vMark1, vMark2, seq)
+            bValidChannel, mDataMark = self.checkWaveformLengthBeforeSending(channel, vData, vMark1, vMark2, seq)
 
-            
-            if (not isinstance(mDataMark, int)):
-                # if this is the first valid channel
-                if len(vData) > 0:
-                    mDataMark = np.zeros((len(vData), 4 * 3), dtype=float)
-            mDataMark[:, 3 * n] = vData
-            mDataMark[:, 3 * n + 1] = vMark1
-            mDataMark[:, 3 * n + 2] = vMark2
-            
-            
+            if bValidChannel
+                # this channel is used
+                lValidChannel += [channel]
+                if (not isinstance(mDataMarkTot, int)):
+                    # if this is the first valid channel
+                    mDataMarkTot = mDataMark
+                else:
+                    mDataMarkTot = np.concatenate((mDataMarkTot, mDataMark))
+                
+                
         # find the zero points and non-zero points in a sequence. Because the 'repeat' function on AWG can not repeat different channels separately, all the channels should be considered together when trying to use 'repeat'.
-        vNonzero = np.array(np.any(mDataMark != 0, axis = 1), dtype=int)
+        vNonzero = np.array(np.any(mDataMarkTot != 0, axis = 0), dtype=int)
         vDiff = np.diff(vNonzero)
-        vUp = np.nonzero(vDiff > 0)[0]
-        NumFrag = 2 * len(vUp) + 1 #for first and last elements are 0
+        vUp = np.nonzero(vDiff > 0)[0] + 1
+        NumFrag = 2 * len(vUp) + 1 # number of fragments. This holds if first and last elements are 0, otherwise it needs to be modified as below
         if vNonzero[0] != 0:
             vUp = np.concatenate(([0], vUp))
             NumFrag -= 1
-        vDown = np.nonzero(vDiff < 0)[0]
+        vDown = np.nonzero(vDiff < 0)[0] + 1
         if vNonzero[-1] > 0:
             vDown = np.concatenate((vDown, [len(vNonzero)]))
             NumFrag -= 1
+        # CHECK UP AND DOWN
         mComposition = np.empty((NumFrag, 3 * 4))
-        for nC in range(self.nCh):
+        for nC in range(len(lValidChannel)):
             for nF in range(NumFrag):
                 start = vUp[nF]
                 end = vDown[nF]
                 #pick up from the 'start' element to 'end - 1' element
-                ThisPulse = mDataMark[start:end, nC]
-                if np.all(ThisPulse == 0)
-                bWaveUpdate = self.createAndSendFragment(ThisPulse, name) or bWaveUpdate
-                mComposition[nF,nC] = name
-            
-        bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
+                ThisPulse = mDataMarkTot[start:end, 3 * nC:3 * nC + 2]
+                name = self.createAndSendFragment(ThisPulse)
+                mComposition[nF, nC] = name
+                
+            channel = lValidChannel[nC]
+            # compare to previous trace
+            if vName != self.lOldName[:, channel - 1]:
+                self.bSeqUpdate = True
+
         
-    return (bWaveUpdate, mComposition)
+        
+            
+
+        
+    return mComposition
     
     def createAndSendFragment(self, vFragment, name):
+    
+            vData = mDataMark[:, 0]
+        vMark1 = mDataMark[:, 1]
+        vMark2 = mDataMark[:, 2]
+        if np.all(ThisPulse == 0)
         
-        return bWaveUpdate
+        return name
     
     def assembleSubsequence(self, ):
     
