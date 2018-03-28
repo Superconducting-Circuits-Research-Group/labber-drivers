@@ -162,6 +162,7 @@ class Driver(VISA_Driver):
         self.bIsStopped = False
         bWaveUpdate = False
         if self.bFastSeq:
+            if 
             self.decomposeWaveformAndSendFragments(seq)
         else:
             # go through all channels
@@ -438,7 +439,7 @@ class Driver(VISA_Driver):
         return vU16
     
     def decomposeWaveformAndSendFragments(self, seq):
-        """"decompose the waveform into fragments (to assemble a subsequence)"""
+        """"decompose the waveform into fragments (to assemble a sequence)"""
         mDataMarkTot = 0 #initial value
         lValidChannel = []
         for n in range(self.nCh):
@@ -459,7 +460,7 @@ class Driver(VISA_Driver):
                     mDataMarkTot = mDataMark
                 else:
                     mDataMarkTot = np.concatenate((mDataMarkTot, mDataMark))
-                
+             
                 
         # find the zero points and non-zero points in a sequence. Because the 'repeat' function on AWG can not repeat different channels separately, all the channels should be considered together when trying to use 'repeat'.
         vNonzero = np.array(np.any(mDataMarkTot != 0, axis = 0), dtype=int)
@@ -476,36 +477,98 @@ class Driver(VISA_Driver):
         # CHECK UP AND DOWN
         mComposition = np.empty((NumFrag, 3 * 4))
         for nC in range(len(lValidChannel)):
+            channel = lValidChannel[nC]
+            Vpp = self.getValue('Ch%d - Range' % channel)
             for nF in range(NumFrag):
                 start = vUp[nF]
                 end = vDown[nF]
                 #pick up from the 'start' element to 'end - 1' element
                 ThisPulse = mDataMarkTot[start:end, 3 * nC:3 * nC + 2]
-                name = self.createAndSendFragment(ThisPulse)
+                if np.all(np.diff(ThisPulse) == 0):
+                # constant pulse
+                    DataV = ThisPulse[0, 0]
+                    Mark1V = ThisPulse[0, 1]
+                    Mark2V = ThisPulse[0, 2]
+                    if seq:
+                    #if not belong to the first waveform in a sequence, check whether the waveform already exists in the waveform list\
+                        bWaveformsExist = True
+                        if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
+                            for i in range(4):
+                                testname = 'zero_' + str(10 ** i)
+                                if not testname in self.lWaveform:
+                                    bWaveformsExist = False        
+                        else:
+                        # other constant pulses
+                            for i in range(4):
+                                testname = 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_'  + str(10 ** i)
+                                if not testname in self.lWaveform:
+                                    bWaveformsExist = False  
+                        if bWaveformsExist:
+                            ThisLength = len(ThisPulse)
+                            sThisLength = str(ThisLength)
+                            for i in sThisLength
+                                name = 
+                    
+                    
+                name = self.createAndSendFragment(ThisPulse, channel, seq)
                 mComposition[nF, nC] = name
                 
-            channel = lValidChannel[nC]
+            
             # compare to previous trace
-            if vName != self.lOldName[:, channel - 1]:
+            if lValidChannel != self.lValidChannel or vName != self.lOldName[:, channel - 1]:
                 self.bSeqUpdate = True
 
         
-        
+            self.lValidChannel = lValidChannel   
             
 
         
     return mComposition
     
-    def createAndSendFragment(self, vFragment, name):
-    
-            vData = mDataMark[:, 0]
+    def createAndSendFragment(self, vFragment, channel):
+        """ determine the name of the pulse and send it to the AWG """
+        mDataMark = vFragment
+        vData = mDataMark[:, 0]
         vMark1 = mDataMark[:, 1]
         vMark2 = mDataMark[:, 2]
-        if np.all(ThisPulse == 0)
+        Vpp = self.getValue('Ch%d - Range' % channel)
+        if np.all(np.diff(mDataMark) == 0):
+        # constant pulse
+            if [vData[0], vMark1[0], vMark2[0]] == [0, 0, 0]:
+            # all zero
+                name = 'zero_' + str(len(vData))
+            else:
+                name = 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(len(vData))
+        else:
+            time = self.askAndLog('SYST:TIME?', bCheckError=False)
+            name = 'pulse' + time
+            
         
+        vU16 = self.scaleWaveformAndMarkerToU16(vData, vMark1, vMark2, channel)
+        
+        if not self.bIsStopped:
+            self.writeAndLog(':AWGC:STOP;')
+            self.bIsStopped = True
+        # create binary data as bytes with header
+        start, length = 0, len(vU16)
+        sLen = b'%d' % (2*length)
+        sHead = b'#%d%s' % (len(sLen), sLen)
+        # send to tek, start by turning off output
+        sname = name.encode()
+        sSend = b':OUTP%d:STAT 0;' % channel
+        sSend += b':WLIS:WAV:DATA "%s",%d,%d,%s' % (sname, start, length,
+                 sHead + vU16[start:start+length].tobytes())
+        self.write_raw(sSend)
         return name
     
-    def assembleSubsequence(self, ):
+    def getWaveformList(self):
+        """get the waveform list on the AWG"""
+        size = self.askAndLog('WLIS:SIZE?', bCheckError=False)
+        self.lWaveform = list(range(size))
+        for i in range(size):
+            self.lWaveform[i] = self.askAndLog('WLIS:NAME? ' + str(i), bCheckError=False)
+            
+    def assembleSequence(self, ):
     
     
     
