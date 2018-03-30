@@ -466,52 +466,85 @@ class Driver(VISA_Driver):
         vNonzero = np.array(np.any(mDataMarkTot != 0, axis = 0), dtype=int)
         vDiff = np.diff(vNonzero)
         vUp = np.nonzero(vDiff > 0)[0] + 1
-        NumFrag = 2 * len(vUp) + 1 # number of fragments. This holds if first and last elements are 0, otherwise it needs to be modified as below
-        if vNonzero[0] != 0:
+        NumFrag = 2 * len(vUp) + 1 # number of fragments. This holds if the first and last elements are 0, otherwise it needs to be modified as below
+        if vNonzero[0]:
             vUp = np.concatenate(([0], vUp))
-            NumFrag -= 1
+            NumFrag += 1
         vDown = np.nonzero(vDiff < 0)[0] + 1
-        if vNonzero[-1] > 0:
+        if vNonzero[-1]:
             vDown = np.concatenate((vDown, [len(vNonzero)]))
             NumFrag -= 1
         # CHECK UP AND DOWN
-        mComposition = np.empty((NumFrag, 3 * 4))
+        
+        
+        lNames = []   # !! THIS SHOULD BE CHANGED     
         for nC in range(len(lValidChannel)):
             channel = lValidChannel[nC]
             Vpp = self.getValue('Ch%d - Range' % channel)
             for nF in range(NumFrag):
                 start = vUp[nF]
                 end = vDown[nF]
-                #pick up from the 'start' element to 'end - 1' element
-                ThisPulse = mDataMarkTot[start:end, 3 * nC:3 * nC + 2]
+                # pick up from the 'start' element to 'end - 1' element
+                ThisPulse = mDataMarkTot[3 * nC:3 * nC + 2, start:end]
                 if np.all(np.diff(ThisPulse) == 0):
                 # constant pulse
                     DataV = ThisPulse[0, 0]
                     Mark1V = ThisPulse[0, 1]
                     Mark2V = ThisPulse[0, 2]
+                    bWaveformsExist = True
+                    
                     if seq:
-                    #if not belong to the first waveform in a sequence, check whether the waveform already exists in the waveform list\
-                        bWaveformsExist = True
+                    #if not belong to the first waveform in a sequence, check whether the waveform already exists in the waveform list
                         if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
+                        # all zeros, check whether there are four waveforms in the waveform list ( length = 1, 10, 100, 1000 )
                             for i in range(4):
                                 testname = 'zero_' + str(10 ** i)
                                 if not testname in self.lWaveform:
-                                    bWaveformsExist = False        
+                                    bWaveformsExist = False      
                         else:
                         # other constant pulses
                             for i in range(4):
                                 testname = 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_'  + str(10 ** i)
                                 if not testname in self.lWaveform:
-                                    bWaveformsExist = False  
-                        if bWaveformsExist:
-                            ThisLength = len(ThisPulse)
-                            sThisLength = str(ThisLength)
-                            for i in sThisLength
-                                name = 
+                                    bWaveformsExist = False                 
+                    else:
+                    # the first waveform, send fragments without checking
+                        bWaveformsExist = False
+                        
+                    if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
+                    # all zeros
+                        if not bWaveformsExist:
+                        # send waveforms
+                            for i in range(4):
+                                mDataMark = np.zeros(3, 10 ** i)
+                                self.createAndSendFragment(mDataMark)
+                        # store names        
+                        ThisLength = len(ThisPulse)
+                        sThisLength = str(ThisLength)
+                        for i in len(sThisLength):
+                            if int(sThisLength[i]) #nonzero
+                                lNames += ['R' + sThisLength[i] + 'zero_' + str(10 ** ( 3 - i ))]                     
+                    else:
+                    # other constant pulses
+                        if not bWaveformsExist:
+                        # send waveforms
+                            for i in range(4):
+                                mDataMark = np.zeros(3, 10 ** i)
+                                mDataMark[0, :] = vData[0]
+                                mDataMark[1, :] = vMark1[0]
+                                mDataMark[2, :] = vMark2[0]
+                                self.createAndSendFragment(mDataMark)
+                        # store names
+                        ThisLength = len(ThisPulse)
+                        sThisLength = str(ThisLength)
+                        for i in len(sThisLength):
+                            if int(sThisLength[i]) #nonzero
+                                name += ['R' + sThisLength[i] + 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(10 ** ( 3 - i ))]    
                     
-                    
-                name = self.createAndSendFragment(ThisPulse, channel, seq)
-                mComposition[nF, nC] = name
+                else:
+                # other complex shape pulses
+                    lNames = self.createAndSendFragment(ThisPulse, channel, seq)
+
                 
             
             # compare to previous trace
@@ -528,9 +561,9 @@ class Driver(VISA_Driver):
     def createAndSendFragment(self, vFragment, channel):
         """ determine the name of the pulse and send it to the AWG """
         mDataMark = vFragment
-        vData = mDataMark[:, 0]
-        vMark1 = mDataMark[:, 1]
-        vMark2 = mDataMark[:, 2]
+        vData = mDataMark[0, :]
+        vMark1 = mDataMark[1, :]
+        vMark2 = mDataMark[2, :]
         Vpp = self.getValue('Ch%d - Range' % channel)
         if np.all(np.diff(mDataMark) == 0):
         # constant pulse
