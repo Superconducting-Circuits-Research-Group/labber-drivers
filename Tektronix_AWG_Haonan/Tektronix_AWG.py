@@ -488,8 +488,8 @@ class Driver(VISA_Driver):
                 end = vDown[nF]
                 # pick up from the 'start' element to 'end - 1' element
                 ThisPulse = mDataMarkTot[3 * nC:3 * nC + 2, start:end]
-                if np.all(np.diff(ThisPulse) == 0):
-                # constant pulse
+                if np.all(np.diff(mDataMarkTot[:, start:end]) == 0):
+                # constant pulse for all channels
                     DataV = ThisPulse[0, 0]
                     Mark1V = ThisPulse[0, 1]
                     Mark2V = ThisPulse[0, 2]
@@ -519,13 +519,13 @@ class Driver(VISA_Driver):
                         # send waveforms
                             for i in range(4):
                                 mDataMark = np.zeros(3, 10 ** i)
-                                self.createAndSendFragment(mDataMark)
+                                self.createAndSendFragment(mDataMark, channel)
                         # store names        
                         ThisLength = len(ThisPulse)
                         sThisLength = str(ThisLength)
                         for i in len(sThisLength):
                             if int(sThisLength[i]) #nonzero
-                                lNames[nC] += ['R' + sThisLength[i] + 'zero_' + str(10 ** ( 3 - i ))]                     
+                                lNames[nC] = lNames[nC] + ['R' + sThisLength[i] + 'zero_' + str(10 ** ( 3 - i ))]                     
                     else:
                     # other constant pulses
                         if not bWaveformsExist:
@@ -535,21 +535,22 @@ class Driver(VISA_Driver):
                                 mDataMark[0, :] = vData[0]
                                 mDataMark[1, :] = vMark1[0]
                                 mDataMark[2, :] = vMark2[0]
-                                self.createAndSendFragment(mDataMark)
+                                self.createAndSendFragment(mDataMark, channel)
                         # store names
                         ThisLength = len(ThisPulse)
                         sThisLength = str(ThisLength)
                         for i in len(sThisLength):
                             if int(sThisLength[i]) #nonzero
-                                lNames[nC] += ['R' + sThisLength[i] + 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(10 ** ( 3 - i ))]                       
+                                lNames[nC] = lNames[nC] + ['R' + sThisLength[i] + 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(10 ** ( 3 - i ))]                       
                 else:
-                # other complex shape pulses
-                    lNames[nC] = self.createAndSendFragment(ThisPulse, channel, seq)
+                # other complex shape pulses exist in at least one channel
+                    lNames[nC] = self.createAndSendFragment(ThisPulse, channel)
 
         # compare to previous trace
         if lValidChannel != self.lValidChannel or lNames != self.lStoredNames[seq]:
             self.bSeqUpdate = True
             self.lValidChannel = lValidChannel
+            lNames = np.array(lNames).transpose().tolist() # transpose the list, so that the sublists are divided by different fragments (therefore different sublists are different elements in the whole sequence)
             self.lStoredNames[seq] = lNames
             
         if not seq:
@@ -605,13 +606,22 @@ class Driver(VISA_Driver):
     def assembleSequence(self):
     """assemble the fragment waveforms into a sequence"""
         self.writeAndLog('SEQ:LENG 0')
-        self.writeAndLog('SEQ:LENG %d' % n_seq)
-        for n1 in range(n_seq):               
-            for n2, bUpdate in enumerate(self.lInUse):
-                if bUpdate:
-                    name = 'Labber_%d_%d' % (n2+1, n1+1)
-                    self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
-                                     (n1+1, n2+1, name))
+        lFlattenNames = [item for sublist in self.lStoredNames for item in sublist]
+        #flatten the list, merge the lists for different seq together
+        #which means:
+        #    for sublist in l:
+        #        for item in sublist:
+        #            lFlattenNames.append(item)
+        
+        self.writeAndLog('SEQ:LENG %d' % len(lFlattenNames))
+        
+        for n1 in range(len(lFlattenNames)):               
+            for n2, channel in enumerate(self.lValidChannel):
+                name = lFlattenNames[n1][n2]
+                if name.startswith('R')
+                
+                self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
+                                 (n1+1, channel, name))
         # don't wait for trigger 
             self.writeAndLog('SEQ:ELEM%d:TWA 0' % (n1+1))
         # for last element, set jump to first
