@@ -83,6 +83,7 @@ class Driver(VISA_Driver):
             # if sequence mode, make sure the buffer contains enough waveforms
             if self.isHardwareLoop(options):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+				self.bFastSeq = self.getValue('Fast Sequence Transfer')
                 # if first call, clear sequence and create buffer
                 if seq_no==0:
                     # variable for keepin track of sequence updating
@@ -134,7 +135,6 @@ class Driver(VISA_Driver):
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-            self.bFastSeq = self.getValue('Fast Sequence Transfer')
             if self.isHardwareLoop(options):
                 seq = seq_no
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
@@ -618,10 +618,17 @@ class Driver(VISA_Driver):
         for n1 in range(len(lFlattenNames)):               
             for n2, channel in enumerate(self.lValidChannel):
                 name = lFlattenNames[n1][n2]
-                if name.startswith('R')
-                
+				loopnum = 1
+                if name.startswith('R'):
+					ind = 1
+					while name[ind].isnumeric():
+						ind += 1
+					loopnum = name[1: ind]
+					name = name[ind:]
                 self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
-                                 (n1+1, channel, name))
+                                 (n1 + 1, channel, name))
+				if loopnum > 1 and n2 == 0
+					self.writeAndLog('SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
         # don't wait for trigger 
             self.writeAndLog('SEQ:ELEM%d:TWA 0' % (n1+1))
         # for last element, set jump to first
