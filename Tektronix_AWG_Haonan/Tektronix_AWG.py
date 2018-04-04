@@ -83,7 +83,7 @@ class Driver(VISA_Driver):
             # if sequence mode, make sure the buffer contains enough waveforms
             if self.isHardwareLoop(options):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-				self.bFastSeq = self.getValue('Fast Sequence Transfer')
+                self.bFastSeq = self.getValue('Fast Sequence Transfer')
                 # if first call, clear sequence and create buffer
                 if seq_no==0:
                     # variable for keepin track of sequence updating
@@ -191,7 +191,7 @@ class Driver(VISA_Driver):
             if (seq+1) < n_seq:
                 return
             # final call, check if sequence has changed
-            self.log('bSeqUpdate=%s' % self.bSeqUpdate)
+            self.log('bSeqUpdate=%s' % str(self.bSeqUpdate))
             if self.bSeqUpdate or n_seq != self.nOldSeq:
                 # create sequence list, first clear to reset old values
                 if self.bFastSeq:
@@ -456,7 +456,7 @@ class Driver(VISA_Driver):
             # similar process in self.sendWaveformToTek
             bValidChannel, mDataMark = self.checkWaveformLengthBeforeSending(channel, vData, vMark1, vMark2, seq)
 
-            if bValidChannel
+            if bValidChannel:
                 # this channel is used
                 lValidChannel += [channel]
                 if (not isinstance(mDataMarkTot, int)):
@@ -524,7 +524,7 @@ class Driver(VISA_Driver):
                         ThisLength = len(ThisPulse)
                         sThisLength = str(ThisLength)
                         for i in len(sThisLength):
-                            if int(sThisLength[i]) #nonzero
+                            if int(sThisLength[i]): #nonzero
                                 lNames[nC] = lNames[nC] + ['R' + sThisLength[i] + 'zero_' + str(10 ** ( 3 - i ))]                     
                     else:
                     # other constant pulses
@@ -540,7 +540,7 @@ class Driver(VISA_Driver):
                         ThisLength = len(ThisPulse)
                         sThisLength = str(ThisLength)
                         for i in len(sThisLength):
-                            if int(sThisLength[i]) #nonzero
+                            if int(sThisLength[i]): #nonzero
                                 lNames[nC] = lNames[nC] + ['R' + sThisLength[i] + 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(10 ** ( 3 - i ))]                       
                 else:
                 # other complex shape pulses exist in at least one channel
@@ -604,7 +604,7 @@ class Driver(VISA_Driver):
             
             
     def assembleSequence(self):
-    """assemble the fragment waveforms into a sequence"""
+        """assemble the fragment waveforms into a sequence"""
         self.writeAndLog('SEQ:LENG 0')
         lFlattenNames = [item for sublist in self.lStoredNames for item in sublist]
         #flatten the list, merge the lists for different seq together
@@ -618,17 +618,17 @@ class Driver(VISA_Driver):
         for n1 in range(len(lFlattenNames)):               
             for n2, channel in enumerate(self.lValidChannel):
                 name = lFlattenNames[n1][n2]
-				loopnum = 1
+                loopnum = 1
                 if name.startswith('R'):
-					ind = 1
-					while name[ind].isnumeric():
-						ind += 1
-					loopnum = name[1: ind]
-					name = name[ind:]
+                    ind = 1
+                    while name[ind].isnumeric():
+                        ind += 1
+                    loopnum = name[1: ind]
+                    name = name[ind:]
                 self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"' % \
                                  (n1 + 1, channel, name))
-				if loopnum > 1 and n2 == 0
-					self.writeAndLog('SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
+                if loopnum > 1 and n2 == 0:
+                    self.writeAndLog('SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
         # don't wait for trigger 
             self.writeAndLog('SEQ:ELEM%d:TWA 0' % (n1+1))
         # for last element, set jump to first
