@@ -334,11 +334,6 @@ class Sequence(object):
                       -y.imag * np.cos(omega * t - pulse.phase + np.pi / 2))
             data_q = (y.real * np.sin(omega * t - pulse.phase) +
                       -y.imag * np.sin(omega * t - pulse.phase + np.pi / 2))
-            # # apply SSBM transform
-            # data_i = (-y.real * np.sin(omega * t - pulse.phase) +
-            #           y.imag * np.sin(omega * t - pulse.phase + np.pi / 2))
-            # data_q = (y.real * np.cos(omega * t - pulse.phase) +
-            #           -y.imag * np.cos(omega * t - pulse.phase + np.pi / 2))
 
             # store result
             waveform[indices] += (data_i + 1j * data_q)
@@ -370,15 +365,15 @@ class Sequence(object):
 
             # scale pulse by 0.5 if pi/2
             if gate in (Gate.X2p, Gate.Y2p, Gate.X2m, Gate.Y2m):
-                pulse.amplitude *= 0.5
+                pulse.amplitude *= .5
             # rotate by 90 deg if pulse is in Y
             if gate in (Gate.Yp, Gate.Y2p, Gate.Ym, Gate.Y2m):
-                pulse.phase += np.pi / 2
+                pulse.phase += np.pi / 2.
             # negate if negative pulse
             if gate in (Gate.Xm, Gate.X2m, Gate.Ym, Gate.Y2m):
                 pulse.amplitude = -pulse.amplitude
             if gate is (Gate.I):
-                pulse.amplitude = 0
+                pulse.amplitude = 0.
 
             # add pulse to waveform
             self.add_single_pulse(qubit, pulse, t0, align_left=align_left)
@@ -481,35 +476,27 @@ class Sequence(object):
             List with two elements - Time at start and end of sequence.
 
         """
-        # disable check based on pulses, always check actual waveforms
-        if False:  # self.time_pulse > self.first_delay:
-            # if pulses have been added with add_gates, get from pulse period
-            t0 = self.first_delay - self.period_1qb
-            t1 = self.time_pulse
-
+        # find end by searching for last non-zero element
+        sum_all = np.zeros_like(self.wave_xy[0])
+        for n in range(self.n_qubit):
+            sum_all += np.abs(self.wave_xy[n])
+            sum_all += np.abs(self.wave_z[n])
+        non_zero = np.where(sum_all > self.readout_noise)[0]
+        # if data is not all zero, add after last pulse
+        if len(non_zero):
+            t0 = max(0.0, (non_zero[0] - 1) / self.sample_rate)
+            t1 = (non_zero[-1] + 1) / self.sample_rate
         else:
-            # find end by searching for last non-zero element
-            sum_all = np.zeros_like(self.wave_xy[0])
-            for n in range(self.n_qubit):
-                sum_all += np.abs(self.wave_xy[n])
-                sum_all += np.abs(self.wave_z[n])
-            non_zero = np.where(sum_all > self.readout_noise)[0]
-            # if data is not all zero, add after last pulse
-            if len(non_zero) > 0:
-                t0 = max(0.0, (non_zero[0] - 1) / self.sample_rate)
-                t1 = (non_zero[-1] + 1) / self.sample_rate
-            else:
-                t0 = 0.0
-                t1 = len(sum_all) / self.sample_rate
+            t0 = 0.0
+            t1 = len(sum_all) / self.sample_rate
         return [t0, t1]
-
 
     def generate_readout(self):
         """Create readout trigger and waveform signals."""
         # get position of readout
         if self.generate_readout_trig or self.generate_readout_iq:
             t = self.find_range_of_sequence()[1] + self.readout_delay
-            i0 = int(round(t * self.sample_rate))
+            i0 = int(t * self.sample_rate + .5)
 
             if i0 > len(self.readout_iq):
                 return
@@ -529,27 +516,26 @@ class Sequence(object):
 
             # readout I/Q waveform
             if self.generate_readout_iq:
-                # ignore readout timestamp if pulses are aligned to end of waveform
+                # ignore readout timestamp if pulses are aligned to end
+                # of waveform
                 if self.align_to_end:
                     wave = self.readout.create_waveform(t_start=0.0)
                 else:
                     wave = self.readout.create_waveform(t_start=t)
-                # if not matching wave sizes, simply replace initialized waveform
+                # if not matching wave sizes, simply replace initialized
+                # waveform
                 if not self.readout.match_main_size:
-                    self.readout_iq[0:len(wave)] = wave
+                    self.readout_iq[:len(wave)] = wave
                 else:
                     i1 = min(len(self.readout_iq), i0 + len(wave))
-                    log.info('i1-i0=%d, len(self.readout_iq)=%d, i0+len(wave)=%d' % (i1-i0,len(self.readout_iq),i0+len(wave)))
-                    log.info('len(wave[:(i1 - i0)])=%d,len(self.readout_iq[i0:i1])=%d' % (len(wave[:(i1 - i0)]),len(self.readout_iq[i0:i1])))
                     self.readout_iq[i0:i1] = wave[:(i1 - i0)]
                 # add IQ offsets
                 self.readout_iq.real += self.i_offset
                 self.readout_iq.imag += self.q_offset
 
-
     def add_microwave_gate(self, config):
-        """Create waveform for gating microwave switch
-
+        """
+        Create waveform for gating microwave switch.
         """
         if not self.generate_gate_switch:
             return
@@ -607,14 +593,13 @@ class Sequence(object):
 
 
     def trim_waveforms(self):
-        """Trim waveforms to match length of sequence
-
-        """
+        """Trim waveforms to match length of sequence."""
         if not (self.trim_to_sequence or self.align_to_end):
             return
         # find range of sequence
         (t0, t1) = self.find_range_of_sequence()
-        # don't trim past extent of microwave gate and readout trig, if in use
+        # don't trim past extent of microwave gate and readout trig,
+        # if in use
         dt_start = 0.0
         dt_end = 0.0
         if self.generate_gate_switch:
@@ -632,11 +617,11 @@ class Sequence(object):
         t1 += dt_end
 
         # get indices for start/end
-        i0 = max(0, int(np.floor(t0 * self.sample_rate)))
+        i0 = max(0, int(t0 * self.sample_rate - .5))
         # check if don't trim beginning of waveform
         if not self.trim_start:
             i0 = 0
-        i1 = min(self.n_pts, int(np.ceil(t1 * self.sample_rate)))
+        i1 = min(self.n_pts, int(t1 * self.sample_rate + .5))
 
         if self.align_to_end:
             # align pulses to end of waveform
@@ -652,9 +637,8 @@ class Sequence(object):
             if self.generate_readout_iq and self.readout.match_main_size:
                 # Add offsets
                 self.readout_iq = \
-                    np.r_[np.zeros(m) + self.i_offset + 1j*self.q_offset,
+                    np.r_[np.zeros(m) + self.i_offset + 1.j * self.q_offset,
                           self.readout_iq[i0:i1]]
-
         else:
             # trim waveforms
             for n in range(self.n_qubit):
@@ -734,11 +718,17 @@ class Sequence(object):
 
                 # Get Fourier values
                 if d[config.get('Fourier terms, 2QB')] == 4 :
-                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),config.get('L2, 2QB' + s),config.get('L3, 2QB' + s),config.get('L4, 2QB' + s)])
+                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),
+                            config.get('L2, 2QB' + s),
+                            config.get('L3, 2QB' + s),
+                            config.get('L4, 2QB' + s)])
                 elif d[config.get('Fourier terms, 2QB')] == 3 :
-                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),config.get('L2, 2QB' + s),config.get('L3, 2QB' + s)])
+                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),
+                                             config.get('L2, 2QB' + s),
+                                             config.get('L3, 2QB' + s)])
                 elif d[config.get('Fourier terms, 2QB')] == 2 :
-                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),config.get('L2, 2QB' + s)])
+                    pulse.Lcoeff = np.array([config.get('L1, 2QB' + s),
+                                             config.get('L2, 2QB' + s)])
                 elif d[config.get('Fourier terms, 2QB')] == 1 :
                     pulse.Lcoeff = np.array([config.get('L1, 2QB' + s)])
 

@@ -84,7 +84,7 @@ class Pulse(object):
         if self.shape == PulseShape.SQUARE:
             duration = self.width + self.plateau
         elif self.shape == PulseShape.RAMP:
-            duration = 2 * self.width + self.plateau
+            duration = 2. * self.width + self.plateau
         elif self.shape == PulseShape.GAUSSIAN:
             duration = self.truncation_range * self.width + self.plateau
         elif self.shape == PulseShape.CZ:
@@ -115,7 +115,7 @@ class Pulse(object):
             if len(t) > 1:
                 t0 += (t[1] - t[0]) / 2.
 
-            values = ((t >= (t0 - (self.width + self.plateau) / 2.)) &
+            values = ((t > (t0 - (self.width + self.plateau) / 2.)) &
                       (t <  (t0 + (self.width + self.plateau) / 2.)))
 
             values = values * self.amplitude
@@ -147,7 +147,7 @@ class Pulse(object):
                     values = np.zeros_like(t)
             else:
                 # add plateau
-                values = np.array(((t >= (t0 - self.plateau / 2.)) &
+                values = np.array(((t > (t0 - self.plateau / 2.)) &
                                    (t < (t0 + self.plateau / 2.))),
                                    dtype=float)
                 if std > 0:
@@ -158,7 +158,7 @@ class Pulse(object):
                         (2. * std**2.)))
                     # after plateau
                     values += (
-                        (t >= (t0 + self.plateau / 2.)) *
+                        (t > (t0 + self.plateau / 2.)) *
                         np.exp(-(t - (t0 + self.plateau / 2.))**2. /
                         (2. * std**2.)))
 

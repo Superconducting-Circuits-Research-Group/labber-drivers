@@ -62,7 +62,7 @@ class Readout(object):
             for n in range(self.max_qubit):
                 # pre-distortion settings are currently same for all qubits
                 linewidth = config.get('Resonator linewidth')
-                self.measured_rise[n] = 1.0 / (2 * np.pi * linewidth)
+                self.measured_rise[n] = 1. / (2. * np.pi * linewidth)
                 self.target_rise[n] = config.get('Target rise time')
         # demodulation
         self.demod_skip = config.get('Demodulation - Skip')
@@ -89,7 +89,7 @@ class Readout(object):
 
         """
         # create time and output waveform
-        n_pts = int(self.duration * self.sample_rate)
+        n_pts = int(self.duration * self.sample_rate + .5)
         t = np.arange(n_pts, dtype=float) / self.sample_rate
         waveform = np.zeros_like(t, dtype=complex)
 
@@ -97,13 +97,13 @@ class Readout(object):
         for n in range(self.n_readout):
             # get parameters
             a = self.amplitudes[n]
-            omega = 2 * np.pi * self.frequencies[n]
+            omega = 2. * np.pi * self.frequencies[n]
             if self.distribute_phases:
                 # phi = 2 * np.pi * n / self.n_readout
                 # phi = 2 * np.pi * np.random.rand()
                 phi = self.phases[n]
             else:
-                phi = 0.0
+                phi = 0.
             # create square baseband waveform
             y = np.ones_like(t, dtype=complex)
             # apply pre-distortion
@@ -113,7 +113,7 @@ class Readout(object):
                       np.exp(-(t - t[0]) / self.target_rise[n]))
 
             # remove phase drift due to LO-RF difference
-            phi -= 2 * np.pi * self.freq_offset * t_start
+            phi -= 2. * np.pi * self.freq_offset * t_start
             # add IQ skew
             phi_s = self.iq_skew
 
