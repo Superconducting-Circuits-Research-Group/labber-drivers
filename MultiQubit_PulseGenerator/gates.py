@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-
 from enum import Enum
 
 class Gate(Enum):
-    """Define possible qubit gates"""
+    """Define possible qubit gates."""
     # single-qubit gates
     I = -1
     Xp = 0
@@ -23,7 +22,6 @@ ONE_QUBIT_GATES = (Gate.Xp, Gate.Xm, Gate.X2p, Gate.X2m,
                    Gate.Yp, Gate.Ym, Gate.Y2p, Gate.Y2m,
                    Gate.I)
 TWO_QUBIT_GATES = (Gate.CPh,)
-
 
 
 if __name__ == '__main__':

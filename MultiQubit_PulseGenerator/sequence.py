@@ -19,15 +19,18 @@ MAX_QUBIT = 9
 
 
 class Sequence(object):
-    """This class represents a multi-qubit control sequence
+    """
+    This class represents a multi-qubit control sequence.
 
     The class supports two ways of defining pulse sequences:
 
-    (1) Use the functions `add_single_pulse` or `add_single_gate` to add pulses
-        to individual qubit waveforms at arbitrary time positions, or,
+    (1) Use the functions `add_single_pulse` or `add_single_gate` to add
+        pulses to individual qubit waveforms at arbitrary time positions,
+        
+        or,
 
-    (2) Use the function `add_gates` to add a list of pulses to all qubits. The
-        pulses will be separated by a fixed pulse period.
+    (2) Use the function `add_gates` to add a list of pulses to all qubits.
+        The pulses will be separated by a fixed pulse period.
 
     Attributes
     ----------
@@ -181,13 +184,14 @@ class Sequence(object):
 
 
     def generate_sequence(self, config):
-        """Generate sequence by adding gates/pulses to waveforms
+        """
+        Generate sequence by adding gates/pulses to waveforms.
 
         Parameters
         ----------
         config : dict
-            Configuration as defined by Labber driver configuration window
-
+            Configuration as defined by Labber driver configuration
+            window.
         """
         # this function should be overloaded by specific sequence
         pass
@@ -203,7 +207,8 @@ class Sequence(object):
         Parameters
         ----------
         config : dict
-            Configuration as defined by Labber driver configuration window
+            Configuration as defined by Labber driver configuration
+            window.
 
         Returns
         -------
@@ -217,10 +222,9 @@ class Sequence(object):
                 wave_gate : list of numpy arrays
                     Waveforms for gating qubit XY pulses.
                 readout_trig : numpy array
-                    Waveform for triggering/gating qubit readout
+                    Waveform for triggering/gating qubit readout.
                 readout_iq : complex numpy array
-                    Waveform for readout IQ control
-
+                    Waveform for readout IQ control.
         """
         # start by initializing the waveforms
         self.init_waveforms()
@@ -458,7 +462,6 @@ class Sequence(object):
         n_wave = self.n_qubit if self.local_xy else 1
         for n in range(n_wave):
             self.wave_xy[n] = self.predistortions[n].predistort(self.wave_xy[n])
-
 
     def perform_crosstalk_compensation(self):
         """Compensate for Z-control crosstalk

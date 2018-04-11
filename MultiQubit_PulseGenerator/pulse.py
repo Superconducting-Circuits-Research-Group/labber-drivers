@@ -51,10 +51,12 @@ class Pulse(object):
 
     """
 
-    def __init__(self,F_Terms=1,Coupling=20E6,Offset=300E6,Lcoeff = np.array([0.3]),dfdV=0.5E9,period_2qb=50E-9, amplitude=0.5, width=10E-9, plateau=0.0,
-                 frequency=0.0, phase=0.0, shape=PulseShape.GAUSSIAN,
-                 use_drag=False, drag_coefficient=0.0, truncation_range=5.0,
-                 z_pulse=False, start_at_zero=False):
+    def __init__(self, F_Terms=1, Coupling=20E6, Offset=300E6,
+                Lcoeff = np.array([0.3]), dfdV=0.5E9, period_2qb=50E-9,
+                amplitude=0.5, width=10E-9, plateau=0.0,
+                frequency=0.0, phase=0.0, shape=PulseShape.GAUSSIAN,
+                use_drag=False, drag_coefficient=0.0, truncation_range=5.0,
+                z_pulse=False, start_at_zero=False):
         # set variables
         self.amplitude = amplitude
         self.width = width
@@ -77,7 +79,7 @@ class Pulse(object):
         self.period_2qb = period_2qb
 
     def total_duration(self):
-        """Calculate total pulse duration"""
+        """Calculate total pulse duration."""
         # calculate total length of pulse
         if self.shape == PulseShape.SQUARE:
             duration = self.width + self.plateau
@@ -91,7 +93,7 @@ class Pulse(object):
 
 
     def calculate_envelope(self, t0, t):
-        """Calculate pulse envelope
+        """Calculate pulse envelope.
 
         Parameters
         ----------
@@ -111,60 +113,65 @@ class Pulse(object):
         if self.shape == PulseShape.SQUARE:
             # reduce risk of rounding errors by putting checks between samples
             if len(t) > 1:
-                t0 += (t[1] - t[0]) / 2.0
+                t0 += (t[1] - t[0]) / 2.
 
-            values = ((t >= (t0 - (self.width + self.plateau) / 2)) &
-                      (t < (t0 + (self.width + self.plateau) / 2)))
+            values = ((t >= (t0 - (self.width + self.plateau) / 2.)) &
+                      (t <  (t0 + (self.width + self.plateau) / 2.)))
 
-            values = values*self.amplitude
+            values = values * self.amplitude
 
         elif self.shape == PulseShape.RAMP:
             # rising and falling slopes
-            vRise = ((t - (t0 - self.plateau / 2 - self.width)) /
+            vRise = ((t - (t0 - self.plateau / 2. - self.width)) /
                      self.width)
-            vRise[vRise < 0.0] = 0.0
-            vRise[vRise > 1.0] = 1.0
-            vFall = (((t0 + self.plateau / 2 + self.width) - t) /
+            vRise[vRise < 0.] = 0.
+            vRise[vRise > 1.] = 1.
+            vFall = (((t0 + self.plateau / 2. + self.width) - t) /
                      self.width)
-            vFall[vFall < 0.0] = 0.0
-            vFall[vFall > 1.0] = 1.0
+            vFall[vFall < 0.] = 0.
+            vFall[vFall > 1.] = 1.
             values = vRise * vFall
 
-            values = values*self.amplitude
+            values = values * self.amplitude
 
         elif self.shape == PulseShape.GAUSSIAN:
             # width is two t std
             # std = self.width/2;
             # alternate; std is set to give total pulse area same as a square
-            std = self.width / np.sqrt(2 * np.pi)
+            std = self.width / np.sqrt(2. * np.pi)
             if self.plateau == 0:
                 # pure gaussian, no plateau
                 if std > 0:
-                    values = np.exp(-(t - t0)**2 / (2 * std**2))
+                    values = np.exp(-(t - t0)**2. / (2. * std**2.))
                 else:
                     values = np.zeros_like(t)
             else:
                 # add plateau
-                values = np.array(((t >= (t0 - self.plateau / 2)) &
-                                   (t < (t0 + self.plateau / 2))), dtype=float)
+                values = np.array(((t >= (t0 - self.plateau / 2.)) &
+                                   (t < (t0 + self.plateau / 2.))),
+                                   dtype=float)
                 if std > 0:
                     # before plateau
                     values += (
-                        (t < (t0 - self.plateau / 2)) *
-                        np.exp(-(t - (t0 - self.plateau / 2))**2 / (2 * std**2))
-                    )
+                        (t < (t0 - self.plateau / 2.)) *
+                        np.exp(-(t - (t0 - self.plateau / 2.))**2. /
+                        (2. * std**2.)))
                     # after plateau
                     values += (
-                        (t >= (t0 + self.plateau / 2)) *
-                        np.exp(-(t - (t0 + self.plateau / 2))**2 / (2 * std**2))
-                    )
-            values = values*self.amplitude
+                        (t >= (t0 + self.plateau / 2.)) *
+                        np.exp(-(t - (t0 + self.plateau / 2.))**2. /
+                        (2. * std**2.)))
+
+            values = values * self.amplitude
+
             if self.start_at_zero:
                 values = values - values.min()
-                values = values/values.max()*self.amplitude
+                values = (values / values.max()) * self.amplitude
 
         elif self.shape == PulseShape.CZ:
-            # notation and calculations are based on the Paper "Fast adiabatic qubit gates using only sigma_z control" PRA 90, 022307 (2014)
+            # notation and calculations are based on the paper "Fast
+            # adiabatic qubit gates using only sigma_z control"
+            # [PRA 90, 022307 (2014)]
 
             # Defining initial and final angles
             theta_i = np.arctan(self.Coupling/self.Offset) # Initial angle of on the |11>-|02> bloch sphere

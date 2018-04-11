@@ -70,7 +70,7 @@ class Readout(object):
         self.freq_offset = config.get('Demodulation - Frequency offset')
         self.use_phase_ref = config.get('Use phase reference signal')
         self.iq_ratio = config.get('Readout I/Q ratio')
-        self.iq_skew = config.get('Readout IQ skew') * np.pi / 180
+        self.iq_skew = config.get('Readout IQ skew') * np.pi / 180.
         # number of records, will be remoevd in later version
         self.n_records = config.get('Demodulation - Number of records', 1)
 

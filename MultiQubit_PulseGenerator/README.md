@@ -5,7 +5,7 @@ The driver uses a library for generating the sequences, which are organized in t
 
 ## sequence.py
 
-Classes for defining gate sequences.  To create a new sequence, subclass the **Sequence** class and implement the gate sequence in the function *generate_sequence*.  The built-in sequences are defined in the file *sequence_builtin.py*
+Classes for defining gate sequences. To create a new sequence, subclass the **Sequence** class and implement the gate sequence in the function *generate_sequence*. The built-in sequences are defined in the file *sequence_builtin.py*.
 
 ## pulse.py
 

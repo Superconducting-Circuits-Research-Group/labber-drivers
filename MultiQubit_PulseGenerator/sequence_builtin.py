@@ -10,7 +10,6 @@ import logging
 log = logging.getLogger('LabberDriver')
 
 
-
 class Rabi(Sequence):
     """Sequence for driving Rabi oscillations in multiple qubits"""
 
@@ -28,40 +27,39 @@ class Rabi(Sequence):
             # add pulse to sequence
             self.add_single_pulse(n, pulse, self.first_delay, align_left=True)
 
-
-
 class CPMG(Sequence):
     """Sequence for multi-qubit Ramsey/Echo/CMPG experiments"""
 
     def generate_sequence(self, config):
         """Generate sequence by adding gates/pulses to waveforms"""
         # get parameters
-        n_pulse = int(config['# of pi pulses'])
+        n_pulse = int(config['Number of pi pulses'])
         pi_to_q = config['Add pi pulses to Q']
         duration = config['Sequence duration']
         edge_to_edge = config['Edge-to-edge pulses']
-        if self.pulses_1qb[0].shape == PulseShape.GAUSSIAN:  # Gaussian pulses
-            truncation = config['Truncation range']
-        else:  # Non-Gaussian pulses
-            truncation = 0.0
-        # center pulses in add_gates mode; ensure sufficient pulse spacing in CPMG mode
-        t0 = self.first_delay + (self.pulses_1qb[0].width*2*truncation + self.pulses_1qb[0].plateau)*0.5
+
+        # center pulses in add_gates mode; ensure sufficient pulse
+        # spacing in CPMG mode
+        t0 = self.first_delay + .5 * self.pulses_1qb[0].total_duration()
         # select type of refocusing pi pulse
         gate_pi = Gate.Yp if pi_to_q else Gate.Xp
 
         # add pulses for all active qubits
         for n, pulse in enumerate(self.pulses_1qb[:self.n_qubit]):
             # get effective pulse durations, for timing purposes
-            width = (2*truncation*pulse.width + pulse.plateau) if edge_to_edge else 0.0
+            if edge_to_edge:
+                width = self.pulses_1qb[0].total_duration()
+            else:
+                width = 0.
             pulse_total = width * (n_pulse + 1)
 
             # special case for -1 pulses => T1 experiment
             if n_pulse < 0:
                 # add pi pulse
                 self.add_single_gate(n, Gate.Xp, t0)
-                # delay the reaodut by creating a very small pulse
+                # delay the readout by creating a very small pulse
                 small_pulse = copy(pulse)
-                small_pulse.amplitude = 1E-6 * pulse.amplitude
+                small_pulse.amplitude = 1.e-9 * pulse.amplitude
                 self.add_single_pulse(n, small_pulse, t0 + duration)
                 continue
 
@@ -74,7 +72,7 @@ class CPMG(Sequence):
                 time_pi = []
             elif n_pulse == 1:
                 # one pulse, echo experiment
-                time_pi = [t0 + width + 0.5 * duration, ]
+                time_pi = [t0 + width + 0.5 * duration]
             elif n_pulse > 1:
                 # figure out timing of pi pulses
                 period = duration / n_pulse
@@ -84,7 +82,6 @@ class CPMG(Sequence):
             # add pi pulses, one by one
             for t in time_pi:
                 self.add_single_gate(n, gate_pi, t)
-
 
 
 class PulseTrain(Sequence):

@@ -31,7 +31,6 @@ class Driver(LabberDriver):
         name = self.getValue('Sequence')
         self.sendValueToOther('Sequence', name)
 
-
     def performSetValue(self, quant, value, sweepRate=0.0, options={}):
         """Perform the Set Value instrument operation."""
         # only do something here if changing the sequence type
@@ -72,11 +71,8 @@ class Driver(LabberDriver):
             self.sequence = mod.CustomSequence()
         return value
 
-
     def performGetValue(self, quant, options={}):
-        """Perform the Get Value instrument operation
-
-        """
+        """Perform the Get Value instrument operation."""
         # ignore if no sequence
         if self.sequence is None:
             return quant.getValue()
@@ -154,12 +150,9 @@ class Driver(LabberDriver):
             value = self.values['readout_iq'].imag
 
         # return data as dict with sampling information
-        dt = 1 / self.sequence.sample_rate
+        dt = 1. / self.sequence.sample_rate
         value = quant.getTraceDict(value, dt=dt)
         return value
-
-
-
 
 
 if __name__ == '__main__':

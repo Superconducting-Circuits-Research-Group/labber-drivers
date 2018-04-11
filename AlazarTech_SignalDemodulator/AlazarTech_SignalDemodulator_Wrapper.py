@@ -196,7 +196,8 @@ class AlazarTechDigitizer():
                 funcStop=None, funcProgress=None,
                 timeout=None, firstTimeout=None,
                 maxBuffers=8, maxBufferSize=(2**26)):
-        """Reads records in NPT AutoDMA mode, converts to float,
+        """
+        Reads records in NPT AutoDMA mode, converts to float,
         demodulates/averages to a single trace.
         """
         data = {}
@@ -215,7 +216,8 @@ class AlazarTechDigitizer():
         if self.nChannels * bytesPerRecord > maxBufferSize:
             raise MemoryError('Maximum allowed buffer size '
                     'is too small to contain even a single record.')
-        log.info('---------nRecord = %d, nRecordsPerBuffer = %d-----------' % (nRecord, nRecordsPerBuffer))
+        log.info('Number of records: %d' % nRecord)
+        log.info('Number of records per buffer: %d' % nRecordsPerBuffer)
         if nRecord % nRecordsPerBuffer != 0:
             log.info('Recomputing the number of records per buffer.')
             nBuffersPerAcquisition = 1
@@ -249,7 +251,7 @@ class AlazarTechDigitizer():
             bytesPerBuffer = int(self.nChannels *
                         nRecordsPerBuffer * bytesPerRecord)
         nBuffersPerAcquisition = int(nRecord / nRecordsPerBuffer)
-        log.info('---------nBuffersPerAcquisition = %d-----------' % nBuffersPerAcquisition)
+        log.info('nBuffersPerAcquisition = %d' % nBuffersPerAcquisition)
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((nBuffersPerAcquisition + 1) // 2),
                               maxBuffers))                          
@@ -258,7 +260,6 @@ class AlazarTechDigitizer():
             mode = 'a'
         elif mode.startswith('Average Buffer') or \
                 mode.startswith('Referenced Average Buffer'):
-            log.info('mode.startswith Buffer')
             mode = 'b'
         else:
             mode = 'i'
@@ -437,7 +438,6 @@ class AlazarTechDigitizer():
             avgRecordFloat[0] *= rangeA
             avgRecordFloat[1] *= rangeB
 
-            log.info('------------------------------------------------------------------------------')
             data['Channel A - Average buffer'] = avgRecordFloat[0]
             data['Channel B - Average buffer'] = avgRecordFloat[1]
 
