@@ -121,14 +121,15 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # if first sequence call, get data
         if seq_no == 0 and self.isFirstCall(options):
             # show status before starting acquisition
-            self.reportStatus('Digitizer - Waiting for signal')
+            self.reportStatus('AlazarTech Digitizer - Starting...')
             # get data
             self.data = self.dig.readRecordsDMA(self._mode,
                     self._nSamples, self._nRecords, self._nRecordsPerBuffer,
                     bConfig=False, bArm=False, bMeasure=True,
                     funcStop=self.isStopped,
                     funcProgress=self._callbackProgress,
-                    firstTimeout=self.dComCfg['Timeout'] + 180.0,
+                    firstTimeout=self.dComCfg['Timeout'] + 180.,
+                    timeout = 1800.,
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
 
@@ -275,6 +276,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 bConfig=False, bArm=bArm, bMeasure=True,
                 funcStop=self.isStopped,
                 funcProgress=self._callbackProgress,
+                firstTimeout=self.dComCfg['Timeout'] + 180.,
+                timeout = 1800.,
                 maxBuffers=self._nMaxBuffers,
                 maxBufferSize=self._maxBufferSize)
 

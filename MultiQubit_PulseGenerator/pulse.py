@@ -116,7 +116,7 @@ class Pulse(object):
                 t0 += (t[1] - t[0]) / 2.
 
             values = ((t > (t0 - (self.width + self.plateau) / 2.)) &
-                      (t <  (t0 + (self.width + self.plateau) / 2.)))
+                      (t < (t0 + (self.width + self.plateau) / 2.)))
 
             values = values * self.amplitude
 
@@ -139,9 +139,9 @@ class Pulse(object):
             # std = self.width/2;
             # alternate; std is set to give total pulse area same as a square
             std = self.width / np.sqrt(2. * np.pi)
-            if self.plateau == 0:
+            if self.plateau == 0.:
                 # pure gaussian, no plateau
-                if std > 0:
+                if std > 0.:
                     values = np.exp(-(t - t0)**2. / (2. * std**2.))
                 else:
                     values = np.zeros_like(t)
@@ -153,12 +153,12 @@ class Pulse(object):
                 if std > 0:
                     # before plateau
                     values += (
-                        (t < (t0 - self.plateau / 2.)) *
+                        (t <= (t0 - self.plateau / 2.)) *
                         np.exp(-(t - (t0 - self.plateau / 2.))**2. /
                         (2. * std**2.)))
                     # after plateau
                     values += (
-                        (t > (t0 + self.plateau / 2.)) *
+                        (t >= (t0 + self.plateau / 2.)) *
                         np.exp(-(t - (t0 + self.plateau / 2.))**2. /
                         (2. * std**2.)))
 

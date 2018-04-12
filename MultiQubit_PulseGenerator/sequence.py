@@ -300,13 +300,13 @@ class Sequence(object):
         duration = pulse.total_duration()
         # shift time to mid point if user gave start point
         if align_left:
-            t0 = t0 + duration / 2
+            t0 = t0 + duration / 2.
         # get the range of indices in use
-        indices = np.arange(
-            max(np.floor((t0 - duration / 2) * self.sample_rate), 0),
-            min(np.ceil((t0 + duration / 2) * self.sample_rate), self.n_pts),
-            dtype=int
-        )
+        indices = np.arange(max(int((t0 - duration / 2.) * 
+                                self.sample_rate - .5), 0),
+                            min(int((t0 + duration / 2.) * 
+                                self.sample_rate + .5), self.n_pts),
+                            dtype=int)
         # return directly if no indices
         if len(indices) == 0:
             return
