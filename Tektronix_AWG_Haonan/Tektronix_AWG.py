@@ -33,9 +33,13 @@ class Driver(VISA_Driver):
         self.nOldLength = 0
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
                        for n1 in range(self.nCh)] for n2 in range(1)]
-        self.lStoredNames = []
+        self.bFastSeq = False
+        self.bClearWav = True
+        self.lStoredNames = [] # used to record the name of the waveforms that will be used to construct the sequence in fast sequence mode
         self.lValidChannel = []
-        self.lWaveform = []
+        self.lWaveform = [] # used to record what waveforms have been created on the AWG in fast sequence mode
+        self.dNonConstantPulses = {} # used to record non-constant pulses in fast sequence mode
+        self.bFirstInSeq = True # true if it is going to send the first element in the sequence
         # clear old waveforms
         self.lInUse = [False]*self.nCh
         for n in range(self.nCh):
@@ -56,6 +60,7 @@ class Driver(VISA_Driver):
         self.bWaveUpdated = False
         self.bLengthUpdate = True
         self.bFastSeq = False
+        self.bClearWav = True
         self.nOldLength = 0
         self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
@@ -64,6 +69,8 @@ class Driver(VISA_Driver):
         self.lStoredNames = []
         self.lValidChannel = []
         self.lWaveform = []
+        self.dNonConstantPulses = {}
+        self.bFirstInSeq = True
         self.lInUse = [False]*self.nCh
         for n in range(self.nCh):
             channel = n+1
@@ -77,13 +84,16 @@ class Driver(VISA_Driver):
         """Perform the Set Value instrument operation. This function should
         return the actual value set by the instrument"""
         # keep track of if waveform is updated, to avoid sending it many times
+        self.log('In seq, quant.name = %s' % str(quant.name))
         if self.isFirstCall(options):
+            
             self.bWaveUpdated = False
             self.bLengthUpdate = True
             # if sequence mode, make sure the buffer contains enough waveforms
             if self.isHardwareLoop(options):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-                self.bFastSeq = self.getValue('Fast Sequence Transfer')
+                self.bFastSeq = self.getValue('Fast sequence transfer')
+                self.bClearWav = self.getValue('Clear wavefroms before transferring')
                 # if first call, clear sequence and create buffer
                 if seq_no==0:
                     # variable for keepin track of sequence updating
@@ -126,7 +136,7 @@ class Driver(VISA_Driver):
                     sOutput += (':OUTP%d:STAT 1;' % (n+1))
             if sOutput != '':
                 self.writeAndLog(sOutput)
-        elif quant.name == 'Fast Sequence Transfer':
+        elif quant.name in ('Fast Sequence Transfer', 'Clear wavefroms before transferring'):
             quant.setValue(value)
         else:
             # for all other cases, call VISA driver
@@ -141,6 +151,21 @@ class Driver(VISA_Driver):
             else:
                 seq = None
             bStart = not self.isHardwareTrig(options)
+            
+            # there is a strange bug that the labber will execute seq_no = 0 case again after the loop. Because some quantities need to be initialized when seq_no = 0 case in the beginning (not the case in the end), the following block is needed.
+            if self.bFastSeq:
+                if self.bClearWav:
+                    if self.bFirstInSeq:
+                        self.writeAndLog('WLIS:WAV:DEL ALL', bCheckError = False)
+                        self.lStoredNames = []
+                        self.lValidChannel = []
+                        self.lWaveform = []
+                        self.dNonConstantPulses = {}
+                        self.bFirstInSeq = False
+                    elif seq_no == 0:
+                        self.bFirstInSeq = True
+                
+            self.log('seq_no=%s,quant=%s, value=%s' % (str(seq_no), str(quant), str(value)))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
         return value
 
@@ -152,7 +177,7 @@ class Driver(VISA_Driver):
                           'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
                           'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
                           'Ch 3 - Marker 1', 'Ch 3 - Marker 2',
-                          'Ch 4 - Marker 1', 'Ch 4 - Marker 2','Fast Sequence Transfer'):
+                          'Ch 4 - Marker 1', 'Ch 4 - Marker 2','Fast sequence transfer'):
             # do nothing here
             value = quant.getValue()
         else:
@@ -173,6 +198,7 @@ class Driver(VISA_Driver):
                 if len(self.lStoredNames) != n_seq:
                 # recreate lStoredNames 
                     self.lStoredNames = [[]] * n_seq
+                    self.bSeqUpdate = True
             self.decomposeWaveformAndSendFragments(seq)
         else:
             # go through all channels
@@ -268,7 +294,9 @@ class Driver(VISA_Driver):
     def scaleWaveformToU16(self, vData, dVpp, ch):
         """Scales the waveform and returns data in a string of U16"""
         # make sure waveform data is within the voltage range 
-        if np.sum(vData > dVpp/2) or np.sum(vData < -dVpp/2):
+        if np.sum(vData > 1.01 * dVpp/2) or np.sum(vData < - 1.01 * dVpp/2):
+            self.debugPrint(np.max(vData))
+            self.debugPrint(dVpp/2)
             raise InstrumentDriver.Error(
                 ('Waveform for channel %d contains values that are ' % ch) + 
                 'outside the channel voltage range.')
@@ -276,11 +304,11 @@ class Driver(VISA_Driver):
         np.clip(vData, -dVpp/2., dVpp/2., vData)
         vU16 = np.array(16382 * (vData + dVpp/2.)/dVpp, dtype=np.uint16)
         return vU16
-
-
+        
     def createWaveformOnTek(self, channel, length, seq=None, bOnlyClear=False):
         """Remove old and create new waveform on the Tek. The waveform is named
         by the channel nunber"""
+        self.log('In createWaveformOnTek, seq = %s' % str(seq))
         if seq is None:
             name = 'Labber_%d' % channel
         else:
@@ -429,7 +457,6 @@ class Driver(VISA_Driver):
         self.nOldLength = len(vData)
         # channel in use, mark
         self.lInUse[n] = True
-        self.log('mDataMark = %s' % str(mDataMark))
         return (True, mDataMark)
            
     
@@ -446,7 +473,7 @@ class Driver(VISA_Driver):
                 # add marker trace to data trace, with bit shift
                 vU16 += 2**(14+m) * vMU16
         return vU16
-    
+       
     
     def decomposeWaveformAndSendFragments(self, seq):
         """"decompose the waveform into fragments (to assemble a sequence)"""
@@ -491,7 +518,6 @@ class Driver(VISA_Driver):
                 end = vNode[nF + 1]
                 # pick up from the 'start' element to 'end - 1' element
                 ThisPulse = mDataMarkTot[3 * nC:3 * nC + 3, start:end]
-                self.log('ThisPulse.shape = %s' % str(ThisPulse.shape))
                 if np.all(np.diff(mDataMarkTot[:, start:end]) == 0):
                 # constant pulse for all channels
                     DataV = ThisPulse[0, 0]
@@ -499,23 +525,17 @@ class Driver(VISA_Driver):
                     Mark2V = ThisPulse[2, 0]
                     bWaveformsExist = True
                     
-                    if seq:
-                    #if not belong to the first waveform in a sequence, check whether the waveform already exists in the waveform list
-                        if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
-                        # all zeros, check whether there are four waveforms in the waveform list ( length = 1, 10, 100, 1000 )
-                            for i in range(4):
-                                testname = 'zero_' + str(10 ** i)
-                                if not testname in self.lWaveform:
-                                    bWaveformsExist = False      
-                        else:
-                        # other constant pulses
-                            for i in range(4):
-                                testname = 'const_Vpp_' + str(Vpp) + str(DataV) + '_' + str(Mark1V) + '_' + str(Mark2V) + '_'  + str(10 ** i)
-                                if not testname in self.lWaveform:
-                                    bWaveformsExist = False                 
+
+                    if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
+                    # all zeros, check whether there are four waveforms in the waveform list ( length = 1, 10, 100, 1000 )
+                        for i in range(4):
+                            testname = 'zero_' + str(10 ** i)
                     else:
-                    # the first waveform, send fragments without checking
-                        bWaveformsExist = False
+                    # other constant pulses
+                        for i in range(4):
+                            testname = 'const_Vpp_' + str(Vpp) + '_' + str(DataV) + '_' + str(Mark1V) + '_' + str(Mark2V) + '_'  + str(10 ** i) 
+                    if not testname in self.lWaveform:
+                        bWaveformsExist = False                 
                         
                     if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
                     # all zeros
@@ -523,7 +543,7 @@ class Driver(VISA_Driver):
                         # send waveforms
                             for i in range(4):
                                 mDataMark = np.zeros((3, 10 ** i))
-                                self.createAndSendFragment(mDataMark, channel)
+                                self.lWaveform = self.lWaveform + [self.createAndSendFragment(mDataMark, channel)]
                         # store names        
                         ThisLength = len(ThisPulse[0, :])
                         sThisLength = str(ThisLength)
@@ -543,7 +563,7 @@ class Driver(VISA_Driver):
                                 mDataMark[0, :] = DataV
                                 mDataMark[1, :] = Mark1V
                                 mDataMark[2, :] = Mark2V
-                                self.createAndSendFragment(mDataMark, channel)
+                                self.lWaveform = self.lWaveform + [self.createAndSendFragment(mDataMark, channel)]
                         # store names
                         ThisLength = len(ThisPulse[0, :])
                         sThisLength = str(ThisLength)
@@ -553,49 +573,94 @@ class Driver(VISA_Driver):
                                     sLoopNum = sThisLength[-( i + 1 )]
                                 else:
                                     sLoopNum = sThisLength[0:-i]
-                                lNames[nC] = lNames[nC] + ['R' + sLoopNum + 'const_Vpp_' + str(Vpp) + str(DataV) + '_' + str(Mark1V) + '_' + str(Mark2V) + '_' + str(10 ** i)]  
-                else:
-                   # other complex shape pulses exist in at least one channel
-                    lNames[nC] = lNames[nC] + [self.createAndSendFragment(ThisPulse, channel)]
+                                lNames[nC] = lNames[nC] + ['R' + sLoopNum + 'const_Vpp_' + str(Vpp) + '_' + str(DataV) + '_' + str(Mark1V) + '_' + str(Mark2V) + '_' + str(10 ** i)]  
+                else:                
+                # other complex shape pulses exist in at least one channel
+                    bWaveformsExist = True
+                    ThisLength = len(ThisPulse[0, :])
+                    if np.all(np.diff(ThisPulse) == 0): 
+                        # This pulse is constant
+                        DataV = ThisPulse[0, 0]
+                        Mark1V = ThisPulse[1, 0]
+                        Mark2V = ThisPulse[2, 0]
+                        if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
+                        # all zeros, check whether there is such a waveform in the waveform list.
+                            ThisLength = len(ThisPulse[0, :])
+                            testname = 'zero_' + str(ThisLength)   
+                        else:
+                        # other constant pulses
+                            testname = 'const_Vpp_' + str(Vpp) + '_' + str(DataV) + '_' + str(Mark1V) + '_' + str(Mark2V) + '_'  + str(ThisLength) 
+                    else:
+                        # other pulses
+                        label = str(np.sum(ThisPulse ** 3)) # almost unique label for different pulses
+                        if len(label) > 5:
+                            label = label[-5:] # choose the last five digits
+                        testname = 'pulse_Vpp_' + str(Vpp) + '_' + label + '_' + str(ThisLength)
+                    if not testname in self.lWaveform:
+                        bWaveformsExist = False                          
+                    # store the name
+                    if not bWaveformsExist:
+                        # not exist. create then store it.
+                        name = self.createAndSendFragment(ThisPulse, channel)
+                        self.lWaveform = self.lWaveform + [name]
+                        lNames[nC] = lNames[nC] + [name]
+                        if testname.startswith('pulse'):
+                            NewDict = {name: ThisPulse}
+                            self.dNonConstantPulses.update(NewDict)
+                    elif testname.startswith('pulse'):
+                        # the name exists for this unknown pulse. check whether the pulses are the same.
+                        if np.all(self.dNonConstantPulses[testname] != ThisPulse):
+                            time = self.askAndLog('SYST:TIME?', bCheckError=False)
+                            NewName = 'pulse_' + time
+                            self.createAndSendFragment(ThisPulse, channel, name = NewName)
+                            self.lWaveform = self.lWaveform + [NewName]
+                            lNames[nC] = lNames[nC] + [NewName]
+                        else:
+                            # exist. store it.
+                            lNames[nC] = lNames[nC] + [testname]
+                    else: 
+                        # the name exists for this constant pulse. store it.
+                        lNames[nC] = lNames[nC] + [testname]
 
         # compare to previous trace
         if lValidChannel != self.lValidChannel or lNames != self.lStoredNames[seq]:
             self.bSeqUpdate = True
             self.lValidChannel = lValidChannel
+            if len(lNames) > 1:
+                if len(lNames[0]) != len(lNames[1]):
+                    raise InstrumentDriver.Error('Some fragments are missing. Check code.')
             lNames = np.array(lNames).transpose().tolist() # transpose the list, so that the sublists are divided by different fragments (therefore different sublists are different elements in the whole sequence)
             self.lStoredNames[seq] = lNames
             
-        if not seq:
-        # first waveform has been sent. get waveform list on the AWG
-            self.getWaveformList()
-
     
-    def createAndSendFragment(self, vFragment, channel):
+    def createAndSendFragment(self, vFragment, channel, name = None, vU16 = None):
         """ determine the name of the pulse and send it to the AWG """
         mDataMark = vFragment
         vData = mDataMark[0, :]
         vMark1 = mDataMark[1, :]
         vMark2 = mDataMark[2, :]
-        Vpp = self.getValue('Ch%d - Range' % channel)
-        if np.all(np.diff(mDataMark) == 0):
-        # constant pulse
-            if [vData[0], vMark1[0], vMark2[0]] == [0, 0, 0]:
-            # all zero
-                name = 'zero_' + str(len(vData))
+        if name is None:
+            Vpp = self.getValue('Ch%d - Range' % channel)
+            if np.all(np.diff(mDataMark) == 0):
+            # constant pulse
+                if [vData[0], vMark1[0], vMark2[0]] == [0, 0, 0]:
+                # all zero
+                    name = 'zero_' + str(len(vData))
+                else:
+                    name = 'const_Vpp_' + str(Vpp) + '_' + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(len(vData))
             else:
-                name = 'const_Vpp_' + str(Vpp) + str(vData[0]) + '_' + str(vMark1[0]) + '_' + str(vMark2[0]) + '_' + str(len(vData))
-        else:
-            time = self.askAndLog('SYST:TIME?', bCheckError=False)
-            name = 'pulse' + time
-            
+                label = str(np.sum(mDataMark ** 3)) # almost unique label for different pulses
+                if len(label) > 5:
+                    label = label[-5:] # choose the last five digits
+                name = 'pulse_Vpp_' + str(Vpp) + '_' + label + '_' + str(len(vData))
         
         if not self.bIsStopped:
             self.writeAndLog(':AWGC:STOP;')
             self.bIsStopped = True
         
-
-        # create binary data as bytes with header    
-        vU16 = self.scaleWaveformAndMarkerToU16(vData, vMark1, vMark2, channel)
+        if vU16 is None:
+            # create binary data as bytes with header    
+            vU16 = self.scaleWaveformAndMarkerToU16(vData, vMark1, vMark2, channel)
         start, length = 0, len(vU16)
         sLen = b'%d' % (2*length)
         sHead = b'#%d%s' % (len(sLen), sLen)
@@ -612,13 +677,30 @@ class Driver(VISA_Driver):
     
     
     def getWaveformList(self):
-        """get the waveform list on the AWG"""
-        size = int(self.askAndLog('WLIS:SIZE?', bCheckError=False))
+        """get the waveform list on the AWG. No need to use it for now."""
+
+        try:
+            size = int(self.askAndLog('WLIS:SIZE?', bCheckError=True))
+        except:
+            bFail = 1
+            nTry = 0
+            while bFail and nTry < 5:
+                try:
+                    bFail = 0
+                    # re-read instrument buffer to clear
+                    size = int(self.read())
+                    # self.log('Data read from Tek: %s' % (size))
+                except:
+                    # self.log('Fail to get size. Try again.')
+                    bFail = 1
+                    nTry += 1
+        # 
+    
         self.lWaveform = list(range(size))
         for i in range(size):
-            self.lWaveform[i] = self.askAndLog('WLIS:NAME? ' + str(i), bCheckError=False)
-            
-            
+            name = self.askAndLog('WLIS:NAME? ' + str(i), bCheckError=False)
+            self.lWaveform[i] = name
+
     def assembleSequence(self):
         """assemble the fragment waveforms into a sequence"""
         self.writeAndLog('SEQ:LENG 0')
@@ -628,7 +710,7 @@ class Driver(VISA_Driver):
         #    for sublist in l:
         #        for item in sublist:
         #            lFlattenNames.append(item)
-        
+        self.reportStatus('Assembling sequence')
         self.writeAndLog('SEQ:LENG %d' % len(lFlattenNames))
         
         for n1 in range(len(lFlattenNames)):               
@@ -650,8 +732,37 @@ class Driver(VISA_Driver):
         # for last element, set jump to first
         self.writeAndLog('SEQ:ELEM%d:GOTO:STAT 1' % len(lFlattenNames))
         self.writeAndLog('SEQ:ELEM%d:GOTO:IND 1' % len(lFlattenNames))
-        self.log('Sequence has been established')
-        # raise InstrumentDriver.Error()
+        
+        bFail = 1
+        nTry = 0
+        while bFail and nTry < 30:
+            try:
+                bFail = 0
+                iRunState = int(self.askAndLog(':AWGC:RST?'))
+            except:
+                # self.log('AWG is busy now. Try in 1 sec.')
+                self.wait(1)
+                bFail = 1
+                nTry += 1
+        try:
+            iRunState = int(self.askAndLog(':AWGC:RST?'))
+        except:
+            raise InstrumentDriver.Error('The sequence can not be assembled in 3 minute. Check error.')
+            
+        
+        bFail = 1
+        while bFail and nTry < 100:
+            try:
+                bFail = 1
+                reply = self.read(n_bytes=None, ignore_termination=True) # clear buffer    
+            except:
+                self.log('Buffer is cleared!')
+                self.wait(0.5)
+                bFail = 0
+                nTry += 1
+
+        self.log('Sequence has been established!')
+
     
     def debugPrint(self, arg):
         self.log('arg = %s' % str(arg))
