@@ -92,12 +92,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
         if self.isHardwareLoop(options):
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             self.sendValueToOther('Records per buffer', n_seq)
+            nRecords = int(np.round(n_seq * self.getValue('Number of records')))
+            self.sendValueToOther('Number of records', nRecords)
             # disable trig timeout (set to 3 minutes)
             self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 180.0)
             # need to re-configure the card since record size was not
             # known at config
             self.dig.readRecordsDMA(self._mode, self._nSamples,
-                    self._nRecords, n_seq,
+                    nRecords, n_seq,
                     bConfig=True, bArm=True, bMeasure=False,
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)

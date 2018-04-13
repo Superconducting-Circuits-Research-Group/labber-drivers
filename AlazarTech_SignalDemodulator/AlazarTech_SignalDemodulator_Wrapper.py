@@ -251,7 +251,7 @@ class AlazarTechDigitizer():
             bytesPerBuffer = int(self.nChannels *
                         nRecordsPerBuffer * bytesPerRecord)
         nBuffersPerAcquisition = int(nRecord / nRecordsPerBuffer)
-        log.info('nBuffersPerAcquisition = %d' % nBuffersPerAcquisition)
+        log.info('nBuffersPerAcquisition: %d' % nBuffersPerAcquisition)
         # do not allocate more buffers than needed for all data
         bufferCount = int(min(2 * ((nBuffersPerAcquisition + 1) // 2),
                               maxBuffers))                          
