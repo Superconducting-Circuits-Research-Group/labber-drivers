@@ -130,8 +130,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     bConfig=False, bArm=False, bMeasure=True,
                     funcStop=self.isStopped,
                     funcProgress=self._callbackProgress,
-                    firstTimeout=self.dComCfg['Timeout'] + 180.,
-                    timeout = 1800.,
+                    firstTimeout=self.dComCfg['Timeout'] + 300.,
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
 
