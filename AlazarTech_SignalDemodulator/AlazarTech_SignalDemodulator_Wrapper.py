@@ -248,8 +248,16 @@ class AlazarTechDigitizer():
                     'are most preferable). Alternatively, try to '
                     'increase the maximum buffer size.')
         else:
-            bytesPerBuffer = int(self.nChannels *
-                        nRecordsPerBuffer * bytesPerRecord)
+            bytesPerBuffer = int(self.nChannels * nRecordsPerBuffer *
+                    bytesPerRecord)
+            expansion = 1
+            for factor in range(2, int(maxBufferSize / bytesPerBuffer) + 1):
+                if nRecord % (factor * nRecordsPerBuffer) == 0 and \
+                        bytesPerBuffer * factor < maxBufferSize:
+                    nRecordsPerBuffer *= factor
+                    bytesPerBuffer *= factor
+                    expansion *= factor
+ 
         nBuffersPerAcquisition = int(nRecord / nRecordsPerBuffer)
         log.info('nBuffersPerAcquisition: %d' % nBuffersPerAcquisition)
         # do not allocate more buffers than needed for all data
@@ -425,9 +433,16 @@ class AlazarTechDigitizer():
             data['Channel B - Average record'] = avgRecordFloat[1]
 
         elif mode == 'b':
-            avgRecord.shape = (self.nChannels,
-                               nRecordsPerBuffer,
-                               samplesPerRecord)
+            if expansion > 1:
+                avgRecord.shape = (self.nChannels,
+                                   expansion,
+                                   int(nRecordsPerBuffer / expansion),
+                                   samplesPerRecord)
+                avgRecord = np.sum(avgRecord, axis=1)
+            else:
+                avgRecord.shape = (self.nChannels,
+                                   nRecordsPerBuffer,
+                                   samplesPerRecord)
 
             if samplesPerRecord != nSamples:
                 avgRecord = avgRecord[:,:,:nSamples]
