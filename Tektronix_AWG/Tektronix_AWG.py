@@ -252,33 +252,7 @@ class Driver(VISA_Driver):
                 # save old sequence length
                 self.nOldSeq = n_seq
             
-            bFail = 1
-            nTry = 0
-            while bFail and nTry < 30:
-                try:
-                    bFail = 0
-                    iRunState = int(self.askAndLog(':AWGC:RST?'))
-                except:
-                    # self.log('AWG is busy now. Try in 1 sec.')
-                    self.wait(1)
-                    bFail = 1
-                    nTry += 1
-            try:
-                iRunState = int(self.askAndLog(':AWGC:RST?'))
-            except:
-                raise InstrumentDriver.Error('The sequence can not be assembled in 3 minute. Check error.')
-                
-            
-            bFail = 1
-            while bFail and nTry < 100:
-                try:
-                    bFail = 1
-                    reply = self.read(n_bytes=None, ignore_termination=True) # clear buffer    
-                except:
-                    self.log('Buffer is cleared!')
-                    self.wait(0.5)
-                    bFail = 0
-                    nTry += 1
+            self.askAndLog('*OPC?')
 
             self.log('Sequence has been established!')
             self.debugPrint(self.lStoredSubseq)
