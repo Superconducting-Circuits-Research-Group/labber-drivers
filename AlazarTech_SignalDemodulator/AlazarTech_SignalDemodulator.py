@@ -18,7 +18,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         boardId = int(self.comCfg.address)
         timeout = self.dComCfg['Timeout']
         self.dig = AlazarDig.AlazarTechDigitizer(systemId=1,
-                boardId=boardId, timeout=timeout)
+                boardId=boardId, timeout=timeout)   
         self.dig.testLED()
 
     def performClose(self, bError=False, options={}):
@@ -261,7 +261,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self._bRef = True
         else:
             self._bRef = False
-        
         # configure DMA read
         self.dig.readRecordsDMA(self._mode, self._nSamples,
                 self._nRecords, self._nRecordsPerBuffer,

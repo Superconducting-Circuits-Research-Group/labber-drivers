@@ -35,6 +35,7 @@ class Driver(VISA_Driver):
                        for n1 in range(self.nCh)] for n2 in range(1)]
         self.bFastSeq = False
         self.bClearWav = True
+        self.bUsesub = True
         self.lStoredNames = [] # used to record the name of the waveforms that will be used to construct the sequence in fast sequence mode
         self.lStoredSubseq = []
         self.lValidChannel = []
@@ -63,6 +64,7 @@ class Driver(VISA_Driver):
         self.bLengthUpdate = True
         self.bFastSeq = False
         self.bClearWav = True
+        self.bUsesub = True
         self.nOldLength = 0
         self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16) \
@@ -100,7 +102,8 @@ class Driver(VISA_Driver):
             if self.isHardwareLoop(options):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
                 self.bFastSeq = self.getValue('Fast sequence transfer')
-                self.bClearWav = self.getValue('Clear wavefroms before transferring')
+                self.bClearWav = self.getValue('Clear waveforms before transferring')
+                self.bUsesub = self.getValue('Use subsequence')
                 # if first call, clear sequence and create buffer
                 if seq_no==0:
                     # variable for keepin track of sequence updating
@@ -143,7 +146,7 @@ class Driver(VISA_Driver):
                     sOutput += (':OUTP%d:STAT 1;' % (n+1))
             if sOutput != '':
                 self.writeAndLog(sOutput)
-        elif quant.name in ('Fast Sequence Transfer', 'Clear wavefroms before transferring'):
+        elif quant.name in ('Fast Sequence Transfer', 'Clear waveforms before transferring'):
             quant.setValue(value)
         else:
             # for all other cases, call VISA driver
@@ -643,23 +646,27 @@ class Driver(VISA_Driver):
         SubseqName = 'Fragment_' + label        
         if SubseqName not in self.dSubseqList:
         # not exist. create then store it.
-            self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
-            self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
+            if self.bUsesub:
+                self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
+                self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
             NewDict = {SubseqName: ThisSubseq}
             self.dSubseqList.update(NewDict)
             for n2, channel in enumerate(lValidChannel):
                 name = ThisSubseq[n2]
-                self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
+                if self.bUsesub:
+                    self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
         else:
             # the name exists for this subsequence. check whether the subsequences are the same.
             if np.all(self.dSubseqList[SubseqName] != ThisSubseq):
                 time = self.askAndLog('SYST:TIME?', bCheckError=False)
                 SubseqName = 'Fragment_' + time
-                self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
-                self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
+                if self.bUsesub:
+                    self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
+                    self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
                 for n2, channel in enumerate(lValidChannel):
                     name = ThisSubseq[n2]
-                    self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
+                    if self.bUsesub:
+                        self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
         lSubseq = lSubseq + [SubseqName]
             
         
@@ -697,25 +704,29 @@ class Driver(VISA_Driver):
                 SubseqName = 'Fragment_' + label        
                 if SubseqName not in self.dSubseqList:
                 # not exist. create then store it.
-                    self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
-                    self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
+                    if self.bUsesub:
+                        self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
+                        self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
                     NewDict = {SubseqName: ThisSubseq}
                     self.dSubseqList.update(NewDict)
                     for n2, channel in enumerate(lValidChannel):
                         name = ThisSubseq[n2]
                         lNames[n2] = lNames[n2] + [name]
-                        self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
+                        if self.bUsesub:
+                            self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
                 else:
                     # the name exists for this subsequence. check whether the subsequences are the same.
                     if np.all(self.dSubseqList[SubseqName] != ThisSubseq):
                         time = self.askAndLog('SYST:TIME?', bCheckError=False)
                         SubseqName = 'Fragment_' + time
-                        self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
-                        self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
+                        if self.bUsesub:
+                            self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS' % SubseqName, bCheckError=False)
+                            self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
                         for n2, channel in enumerate(lValidChannel):
                             name = ThisSubseq[n2]
                             lNames[n2] = lNames[n2] + [name]
-                            self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
+                            if self.bUsesub:
+                                self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
                 lSubseq = lSubseq + [SubseqName]
             
         # compare to previous trace
@@ -726,6 +737,8 @@ class Driver(VISA_Driver):
                 if len(lNames[0]) != len(lNames[1]):
                     raise InstrumentDriver.Error('Some fragments are missing. Check code.')
             lNames = np.array(lNames).transpose().tolist() # transpose the list, so that the sublists are divided by different fragments (therefore different sublists are different elements in the whole sequence)
+            self.debugPrint(len(self.lStoredNames))
+            self.debugPrint(seq)
             self.lStoredSubseq[seq] = lSubseq
             self.lStoredNames[seq] = lNames
             
@@ -802,6 +815,11 @@ class Driver(VISA_Driver):
         self.writeAndLog('SEQ:LENG 0')
         lFlattenNames = [item for sublist in self.lStoredNames for item in sublist]
         lFlattenSubseq = [item for sublist in self.lStoredSubseq for item in sublist]
+        
+        if self.bUsesub:
+            seq_len = len(lFlattenSubseq)
+        else:
+            seq_len = len(lFlattenNames)
         #flatten the list, merge the lists for different seq together
         #which means:
         #    for sublist in l:
@@ -809,31 +827,36 @@ class Driver(VISA_Driver):
         #            lFlattenNames.append(item)
         self.reportStatus('Assembling sequence')
         # self.writeAndLog('SEQ:LENG %d' % len(lFlattenNames))
-        self.writeAndLog('SEQ:LENG %d' % len(lFlattenSubseq))
-        for n1 in range(len(lFlattenSubseq)):
-            # for n2, channel in enumerate(self.lValidChannel):
-                # name = lFlattenNames[n1][n2]
-                # loopnum = 1
-                # if name.startswith('R'):
-                    # ind = 1
-                    # while name[ind].isnumeric():
-                        # ind += 1
-                    # loopnum = int(name[1: ind])
-                    # name = name[ind:]
-                # sSend += (';:SEQ:ELEM%d:WAV%d "%s"' % \
-                                 # (n1 + 1, channel, name))
-            name = lFlattenSubseq[n1]
-            loopnum = 1
-            if name.startswith('R'):
-                ind = 1
-                while name[ind].isnumeric():
-                    ind += 1
-                loopnum = int(name[1: ind])
-                name = name[ind:]                     
-            sSend = (';:SEQ:ELEM%d:SUBS "%s"' % \
-                                  (n1 + 1, name))
-            if loopnum > 1:
-                sSend += (';:SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
+        self.writeAndLog('SEQ:LENG %d' % seq_len)
+        for n1 in range(seq_len):
+            if self.bUsesub:
+                name = lFlattenSubseq[n1]
+                loopnum = 1
+                if name.startswith('R'):
+                    ind = 1
+                    while name[ind].isnumeric():
+                        ind += 1
+                    loopnum = int(name[1: ind])
+                    name = name[ind:]                     
+                sSend = (';:SEQ:ELEM%d:SUBS "%s"' % \
+                                      (n1 + 1, name))
+                if loopnum > 1:
+                    sSend += (';:SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
+            else:
+                sSend = ''
+                for n2, channel in enumerate(self.lValidChannel):
+                    name = lFlattenNames[n1][n2]
+                    loopnum = 1
+                    if name.startswith('R'):
+                        ind = 1
+                        while name[ind].isnumeric():
+                            ind += 1
+                        loopnum = int(name[1: ind])
+                        name = name[ind:]
+                    sSend += (';:SEQ:ELEM%d:WAV%d "%s"' % \
+                                     (n1 + 1, channel, name))
+                    if loopnum > 1 and n2 == 0:
+                        sSend += (';:SEQ:ELEM%d:LOOP:COUNT %d' % (n1 + 1, loopnum))
         
             sSend += ';:SEQ:ELEM%d:TWA 0' % (n1 + 1)
             sSend = sSend.encode()
@@ -843,11 +866,20 @@ class Driver(VISA_Driver):
         # for last element, set jump to first
 
 
-        self.writeAndLog('SEQ:ELEM%d:GOTO:STAT 1' % len(lFlattenSubseq))
-        self.writeAndLog('SEQ:ELEM%d:GOTO:IND 1' % len(lFlattenSubseq))
+        self.writeAndLog('SEQ:ELEM%d:GOTO:STAT 1' % seq_len)
+        self.writeAndLog('SEQ:ELEM%d:GOTO:IND 1' % seq_len)
 
 
-
+    def hashtoAscii(self, h):
+        # convert hash (19 digits) to Ascii characters
+        label = ''
+        offset = 32
+        block = 90
+        num_block = np.log(1e20)//np.log(block)
+        for i in range(num_block):
+            dec = h % ( block ** ( i + 1 ) ) // ( block ** i )
+            label += chr(offset + dec)
+        return label
     
     def debugPrint(self, arg):
         self.log('arg = %s' % str(arg))
