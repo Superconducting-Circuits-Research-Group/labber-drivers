@@ -439,7 +439,7 @@ class AlazarTechDigitizer():
                                    expansion,
                                    int(nRecordsPerBuffer / expansion),
                                    samplesPerRecord)
-                avgRecord = np.sum(avgRecord, axis=1)
+                avgRecord = np.sum(avgRecord, axis=1) / float(expansion)
             else:
                 avgRecord.shape = (self.nChannels,
                                    nRecordsPerBuffer,
