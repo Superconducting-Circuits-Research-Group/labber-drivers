@@ -123,6 +123,7 @@ class Driver(VISA_Driver):
             quant.setValue(value)
             self.bWaveUpdated = True
         elif quant.name in ('Run'):
+            status = self.askAndLog('AWGC:RST?', bCheckError=False)
             self.writeAndLog(':AWGC:RUN')
             # turn on channels again, to avoid issues when turning on/off run mode
             sOutput = ''
@@ -131,7 +132,10 @@ class Driver(VISA_Driver):
                     sOutput += (':OUTP%d:STAT 1;' % (n+1))
             if sOutput != '':
                 self.writeAndLog(sOutput)
-        elif quant.name in ('Fast Sequence Transfer', 'Clear waveforms before transferring'):
+            status = self.askAndLog('AWGC:RST?', bCheckError=False)
+        elif quant.name in ('Hardware loop forced stop'):
+            self.writeAndLog(':AWGC:STOP')
+        elif quant.name in ('Fast sequence transfer'):
             quant.setValue(value)
         else:
             # for all other cases, call VISA driver
@@ -149,7 +153,6 @@ class Driver(VISA_Driver):
             else:
                 seq = None
             bStart = not self.isHardwareTrig(options)
-            
             self.log('seq_no=%s,quant.name=%s, value=%s' % (str(seq_no), str(quant.name), str(value)))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
         return value
@@ -157,7 +160,6 @@ class Driver(VISA_Driver):
 
     # def performGetValue(self, quant, options={}):
         # """Perform the Get Value instrument operation"""
-        # check type of quantity
         # if quant.name in ('Ch 1', 'Ch 2', 'Ch 3', 'Ch 4',
                           # 'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
                           # 'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
