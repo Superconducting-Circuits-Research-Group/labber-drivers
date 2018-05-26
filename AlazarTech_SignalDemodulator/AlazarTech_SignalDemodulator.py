@@ -500,6 +500,11 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     return self.data['Channel A - Average buffer demodulated values'][seq_no]
                 else:
                     return self.data['Channel B - Average buffer demodulated values'][seq_no]
+            elif self.isHardwareLoop(options) and name in ('Channel A - Average record',
+                                                           'Channel B - Average record'):
+                (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+                buff_name = name.replace('record', 'buffer')
+                return quant.getTraceDict(self.data[buff_name][seq_no], dt=self._dt)
             else:
                 raise self._raiseError(name, mode)
                               
@@ -519,6 +524,11 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 if seq_no == 0:
                     self.getDemodulatedValuesFromBuffer()
                 return self.data['Channel A - Average buffer demodulated values'][seq_no]
+            elif self.isHardwareLoop(options) and name in ('Channel A - Average record',
+                                                           'Channel B - Average record'):
+                (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+                buff_name = name.replace('record', 'buffer')
+                return quant.getTraceDict(self.data[buff_name][seq_no], dt=self._dt)
             else:
                 raise self._raiseError(name, mode)
         else:
