@@ -216,8 +216,7 @@ class AlazarTechDigitizer():
         if self.nChannels * bytesPerRecord > maxBufferSize:
             raise MemoryError('Maximum allowed buffer size '
                     'is too small to contain even a single record.')
-        log.info('Number of records: %d' % nRecord)
-        log.info('Number of records per buffer: %d' % nRecordsPerBuffer)
+
         expansion = 1
         if nRecord % nRecordsPerBuffer != 0:
             log.info('Recomputing the number of records per buffer.')
@@ -257,7 +256,10 @@ class AlazarTechDigitizer():
                     nRecordsPerBuffer *= factor
                     bytesPerBuffer *= factor
                     expansion *= factor
- 
+        
+        log.info('Number of records: %d' % nRecord)
+        log.info('Number of records per buffer: %d' % nRecordsPerBuffer)
+
         nBuffersPerAcquisition = int(nRecord / nRecordsPerBuffer)
         log.info('Number of buffers per acquisition: %d'
                 % nBuffersPerAcquisition)

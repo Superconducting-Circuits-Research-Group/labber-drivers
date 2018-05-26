@@ -12,7 +12,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Perform the operation of opening the instrument connection."""
         # keep track of sampled records
         self.data = {}
-        self.n_seq = 1
         self._dt = 1.0
         # open connection
         boardId = int(self.comCfg.address)
@@ -94,18 +93,17 @@ class Driver(InstrumentDriver.InstrumentWorker):
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             self.sendValueToOther('Records per buffer', n_seq)
             nRecords = int(round(self.getValue('Number of records')))
-            self.n_seq = n_seq
+            self._nRecords = n_seq * nRecords
             # disable trig timeout (set to 5 minutes)
             self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 300.0)
             # need to re-configure the card since record size was not
             # known at config
             self.dig.readRecordsDMA(self._mode, self._nSamples,
-                    nRecords*n_seq, n_seq,
+                    self._nRecords, n_seq,
                     bConfig=True, bArm=True, bMeasure=False,
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
         else:
-            self.n_seq = 1
             # if not hardware looping, just trigger the card, buffers
             # are already configured
             self.dig.readRecordsDMA(self._mode, self._nSamples,
@@ -241,7 +239,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # configure memory buffers, only possible when using DMA read
         self._nSamples = int(round(self.getValue('Number of samples')))
         self._nRecords = int(round(self.getValue('Number of records')))
-        self._nRecords *= self.n_seq
         self._nRecordsPerBuffer = int(round(self.getValue('Records per buffer')))
         self._maxBufferSize = int(round(self.getValue('Max buffer size')))
         self._nMaxBuffers = int(round(self.getValue('Max number of buffers')))
