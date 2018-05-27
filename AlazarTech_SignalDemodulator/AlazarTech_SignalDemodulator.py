@@ -340,7 +340,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             raise NotImplementedError("Output data '%s' could not be "
                     "acquired in acquisition mode '%s'." % (name, mode))
 
-    def getData(self, quant, options=None):
+    def getData(self, quant, options={}):
         """Return data that corresponds to the seleted data acquisition
         mode."""
         name = quant.name
