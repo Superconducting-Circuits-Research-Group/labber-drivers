@@ -351,7 +351,8 @@ class Driver(VISA_Driver):
                     'elements: Marker 1 length is %d, '
                               'Marker 2 length is %d, '
                               'Analog Waveform length is %d.'
-                              %(len(vMark1), len(vMark2), len(vData)))
+                              'nPrevData is %d'
+                              %(len(vMark1), len(vMark2), len(vData), self.nPrevData))
         self.nPrevData = len(vData)
         # channel in use, mark
         self.lInUse[n] = True
