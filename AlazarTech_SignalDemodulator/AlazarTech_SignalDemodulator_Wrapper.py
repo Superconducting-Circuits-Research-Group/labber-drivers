@@ -293,7 +293,6 @@ class AlazarTechDigitizer():
             self._bufferCount = bufferCount
 
         if bConfig:
-            log.info('Buffers per acquisition: %d' % nBuffersPerAcquisition)
             log.info('Requested number of buffers: %d' % bufferCount)
             log.info('Buffer size [MB]: %f' % (float(bytesPerBuffer / 2**20)))
             log.info('Records per buffer: %d' % nRecordsPerBuffer)

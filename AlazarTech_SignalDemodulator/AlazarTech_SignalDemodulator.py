@@ -75,13 +75,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 else:
                     self.getRecordsSinglePort()
 
-            # cash demodulation parameters
-            if self._mode.startswith('Individual') or \
-                    self._mode.startswith('Referenced Individual'):
-                self.cashDemodulationParametersForIndividual()
+                # cash demodulation parameters
+                if self._mode.startswith('Individual') or \
+                        self._mode.startswith('Referenced Individual'):
+                    self.cashDemodulationParametersForIndividual()
 
             # return correct data
-            return self.getData(quant)
+            return self.getData(quant, options)
         else:
             # just return the quantity value
             return quant.getValue()
@@ -330,7 +330,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         
         records = self.dig.readRecordsSinglePort(2)
         self.data['Channel B'] = records[:,start:end]
-        self.log(self.data['Channel B'])
         if mode.startswith('Average') or \
                 mode.startswith('Referenced Average'):
             self.data['Channel B - Average record'] = \
@@ -341,8 +340,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     "acquired in acquisition mode '%s'." % (name, mode))
 
     def getData(self, quant, options={}):
-        """Return data that corresponds to the seleted data acquisition
-        mode."""
+        """
+        Return data that corresponds to the selected data acquisition
+        mode.
+        """
         name = quant.name
         mode = self._mode
         if mode == 'Raw':
@@ -497,11 +498,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     return self.data['Channel A - Average buffer demodulated values'][seq_no]
                 else:
                     return self.data['Channel B - Average buffer demodulated values'][seq_no]
-            elif self.isHardwareLoop(options) and name in ('Channel A - Average record',
-                                                           'Channel B - Average record'):
+            elif self.isHardwareLoop(options) and \
+                    name in ('Channel A - Average record',
+                             'Channel B - Average record'):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
                 buff_name = name.replace('record', 'buffer')
-                return quant.getTraceDict(self.data[buff_name][seq_no], dt=self._dt)
+                return quant.getTraceDict(self.data[buff_name][seq_no],
+                        dt=self._dt)
             else:
                 raise self._raiseError(name, mode)
                               
@@ -521,11 +524,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 if seq_no == 0:
                     self.getDemodulatedValuesFromBuffer()
                 return self.data['Channel A - Average buffer demodulated values'][seq_no]
-            elif self.isHardwareLoop(options) and name in ('Channel A - Average record',
-                                                           'Channel B - Average record'):
+            elif self.isHardwareLoop(options) and \
+                    name in ('Channel A - Average record',
+                             'Channel B - Average record'):
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
                 buff_name = name.replace('record', 'buffer')
-                return quant.getTraceDict(self.data[buff_name][seq_no], dt=self._dt)
+                return quant.getTraceDict(self.data[buff_name][seq_no],
+                        dt=self._dt)
             else:
                 raise self._raiseError(name, mode)
         else:
@@ -543,10 +548,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
         recordLength = nTotLength // nRecords
         length = min(length, recordLength - skip)
 
-        if not hasattr(self, '_firstRun'):
-            self._firstRun = True
         # calculate cos/sin vectors, allow segmenting
-        if self._firstRun or dt != self._prev_dt or \
+        if dt != self._prev_dt or \
                 skip != self._prev_skip or \
                 length != self._prev_length or \
                 dFreq != self._prev_dFreq:
@@ -561,8 +564,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             vChB = self.data['Channel B'][:,skip:skip+length]
             vDemodRefs = np.dot(vChB, self._vExp)
             self._vExpRef = np.exp(-1.j * np.angle(vDemodRefs))
-
-        self._firstRun = False
 
     def getAverageRecordFromIndiviual(self):
         """Calculate time average from data and reference."""
