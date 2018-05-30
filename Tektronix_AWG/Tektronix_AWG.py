@@ -152,6 +152,9 @@ class Driver(VISA_Driver):
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
             else:
                 seq = None
+                if len(self.lOldU16) > 1:
+                    self.lOldU16 = [[np.array([], dtype=np.uint16) for n1 in range(self.nCh)]]
+                    self.log('reset self.lOldU16')
             bStart = not self.isHardwareTrig(options)
             self.log('seq_no=%s,quant.name=%s, value=%s' % (str(seq_no), str(quant.name), str(value)))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
