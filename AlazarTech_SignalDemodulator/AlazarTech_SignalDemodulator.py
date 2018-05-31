@@ -36,7 +36,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         # don't do anything until all options are set, then set
         # complete config
         if self.isFinalCall(options):
-            self.setConfiguration()
+            self.setConfiguration(options)
         return value
 
     def performGetValue(self, quant, options={}):
@@ -134,7 +134,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
 
-    def setConfiguration(self):
+    def setConfiguration(self, options={}):
         """Set digitizer configuration based on driver settings."""
         sampleRateIndex = self.getValueIndex('Sample rate')
         # clock configuration
@@ -258,12 +258,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self._bRef = True
         else:
             self._bRef = False
-        # configure DMA read
-        self.dig.readRecordsDMA(self._mode, self._nSamples,
-                self._nRecords, self._nRecordsPerBuffer,
-                bConfig=True, bArm=False, bMeasure=False,
-                maxBuffers=self._nMaxBuffers,
-                maxBufferSize=self._maxBufferSize)
+            
+        if not self.isHardwareLoop(options):
+            # configure DMA read
+            self.dig.readRecordsDMA(self._mode, self._nSamples,
+                    self._nRecords, self._nRecordsPerBuffer,
+                    bConfig=True, bArm=False, bMeasure=False,
+                    maxBuffers=self._nMaxBuffers,
+                    maxBufferSize=self._maxBufferSize)
 
     def getRecordsDMA(self, hardware_trig=False):
         """Resample the data with DMA."""
