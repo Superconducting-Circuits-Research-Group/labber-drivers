@@ -94,8 +94,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             self.sendValueToOther('Records per buffer', n_seq)
             nRecords = int(round(self.getValue('Number of records')))
             self._nRecords = n_seq * nRecords
-            # disable trig timeout (set to 5 minutes)
-            self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 300.0)
+            # disable trig timeout (set to 1 minute)
+            self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 60.0)
             # need to re-configure the card since record size was not
             # known at config
             self.dig.readRecordsDMA(self._mode, self._nSamples,
@@ -130,7 +130,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                     bConfig=False, bArm=False, bMeasure=True,
                     funcStop=self.isStopped,
                     funcProgress=self._callbackProgress,
-                    firstTimeout=self.dComCfg['Timeout'] + 300.,
+                    firstTimeout=self.dComCfg['Timeout'] + 60.,
                     maxBuffers=self._nMaxBuffers,
                     maxBufferSize=self._maxBufferSize)
 
@@ -267,7 +267,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
     def getRecordsDMA(self, hardware_trig=False):
         """Resample the data with DMA."""
-        # in hardware triggering mode, there is no noed to re-arm
+        # in hardware triggering mode, there is no need to re-arm
         # the card
         bArm = not hardware_trig
         # get data
