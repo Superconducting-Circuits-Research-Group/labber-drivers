@@ -109,6 +109,12 @@ class Driver(VISA_Driver):
             elif self.isHardwareTrig(options):
                 # if hardware triggered, always stop outputting before setting
                 self.writeAndLog(':AWGC:STOP;')
+                self.bFastSeq = False
+                self.bUsesub = False
+            else:
+                self.bFastSeq = False
+                self.bUsesub = False
+            
         if quant.name in ('Ch 1', 'Ch 2', 'Ch 3', 'Ch 4',
                           'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
                           'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
@@ -175,7 +181,7 @@ class Driver(VISA_Driver):
         self.bIsStopped = False
         bWaveUpdate = False
         if self.bFastSeq:
-            if seq is None:
+            if seq == 0:
                 # first waveform in the sequence
                 if len(self.lStoredNames) != n_seq:
                     # recreate lStoredNames 
@@ -186,6 +192,10 @@ class Driver(VISA_Driver):
                     self.bSeqUpdate = True
             self.decomposeWaveformAndSendFragments(seq)
         else:
+            if seq is None:
+                mode = self.getValue('Run mode')
+                if mode == 'Sequence':
+                    raise InstrumentDriver.Error('Not hardware loop mode, please change run mode to be "Continuous"!')
             # go through all channels
             for n in range(self.nCh):
                 # channels are numbered 1-4
