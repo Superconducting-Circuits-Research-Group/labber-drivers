@@ -56,7 +56,6 @@ class Driver(VISA_Driver):
 
     def initSetConfig(self):
         """This function is run before setting values in Set Config"""
-        self.log('iniSetConfig')
         # turn off run mode
         self.writeAndLog(':AWGC:STOP;')
         # init vectors with old values
@@ -86,9 +85,7 @@ class Driver(VISA_Driver):
         """Perform the Set Value instrument operation. This function should
         return the actual value set by the instrument"""
         # keep track of if waveform is updated, to avoid sending it many times
-        self.log('In seq, quant.name = %s' % str(quant.name))
         if self.isFirstCall(options):
-            self.log('First call! quant.name = %s' % quant.name)
             for n in range(self.nCh):
                 channel = n+1
                 self.setValue('Ch %d' % channel, [])
@@ -97,18 +94,16 @@ class Driver(VISA_Driver):
             self.bWaveUpdated = False
             # if sequence mode, make sure the buffer contains enough waveforms
             if self.isHardwareLoop(options):
-                # self.bFirstInSeq = True 
-                self.log('First call in HardwareLoop!')
                 (seq_no, n_seq) = self.getHardwareLoopIndex(options)
                 self.bFastSeq = self.getValue('Fast sequence transfer')
                 self.bUsesub = self.getValue('Use subsequence')
                 # if first call, clear sequence and create buffer
-                if seq_no==0:
-                    # variable for keepin track of sequence updating
+                if seq_no == 0:
+                    # variable for keeping track of sequence updating
                     self.writeAndLog(':AWGC:STOP;')
                     self.bSeqUpdate = False
                 # if different sequence length, re-create buffer
-                if seq_no==0 and n_seq != len(self.lOldU16):
+                if seq_no == 0 and n_seq != len(self.lOldU16):
                     self.lOldU16 = [[np.array([], dtype=np.uint16) \
                                    for n1 in range(self.nCh)] for n2 in range(n_seq)]
             elif self.isHardwareTrig(options):
@@ -135,6 +130,7 @@ class Driver(VISA_Driver):
             status = self.askAndLog('AWGC:RST?', bCheckError=False)
         elif quant.name in ('Hardware loop forced stop'):
             self.writeAndLog(':AWGC:STOP')
+            value = True
         elif quant.name in ('Fast sequence transfer'):
             quant.setValue(value)
         else:
@@ -144,36 +140,32 @@ class Driver(VISA_Driver):
 
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
-            self.log('Last call! quant.name = %s' % quant.name)
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             if self.isHardwareLoop(options):
-                self.log('Last call in HardwareLoop!')
                 seq = seq_no
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
             else:
                 seq = None
                 if len(self.lOldU16) > 1:
                     self.lOldU16 = [[np.array([], dtype=np.uint16) for n1 in range(self.nCh)]]
-                    self.log('reset self.lOldU16')
             bStart = not self.isHardwareTrig(options)
-            self.log('seq_no=%s,quant.name=%s, value=%s' % (str(seq_no), str(quant.name), str(value)))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
         return value
 
 
-    # def performGetValue(self, quant, options={}):
-        # """Perform the Get Value instrument operation"""
-        # if quant.name in ('Ch 1', 'Ch 2', 'Ch 3', 'Ch 4',
-                          # 'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
-                          # 'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
-                          # 'Ch 3 - Marker 1', 'Ch 3 - Marker 2',
-                          # 'Ch 4 - Marker 1', 'Ch 4 - Marker 2','Fast sequence transfer'):
+    def performGetValue(self, quant, options={}):
+        """Perform the Get Value instrument operation"""
+        if quant.name in ('Ch 1', 'Ch 2', 'Ch 3', 'Ch 4',
+                          'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
+                          'Ch 2 - Marker 1', 'Ch 2 - Marker 2',
+                          'Ch 3 - Marker 1', 'Ch 3 - Marker 2',
+                          'Ch 4 - Marker 1', 'Ch 4 - Marker 2','Fast sequence transfer'):
             # do nothing here
-            # value = quant.getValue()
-        # else:
+            value = quant.getValue()
+        else:
             # for all other cases, call VISA driver
-            # value = VISA_Driver.performGetValue(self, quant, options)
-        # return value
+            value = VISA_Driver.performGetValue(self, quant, options)
+        return value
 
 
     def sendWaveformAndStartTek(self, seq=None, n_seq=1, bStart=True):
@@ -183,10 +175,10 @@ class Driver(VISA_Driver):
         self.bIsStopped = False
         bWaveUpdate = False
         if self.bFastSeq:
-            if not seq:
-            # first waveform in the sequence
+            if seq is None:
+                # first waveform in the sequence
                 if len(self.lStoredNames) != n_seq:
-                # recreate lStoredNames 
+                    # recreate lStoredNames 
                     self.lStoredNames = [[]] * n_seq
                     self.bSeqUpdate = True
                 if len(self.lStoredSubseq) != n_seq:
@@ -197,24 +189,22 @@ class Driver(VISA_Driver):
             # go through all channels
             for n in range(self.nCh):
                 # channels are numbered 1-4
-                channel = n+1
+                channel = n + 1
                 vData = self.getValueArray('Ch %d' % channel)
                 vMark1 = self.getValueArray('Ch %d - Marker 1' % channel)
                 vMark2 = self.getValueArray('Ch %d - Marker 2' % channel)
-                bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate
-                self.log('bWaveUpdate=%s' % bWaveUpdate)             
+                bWaveUpdate = self.sendWaveformToTek(channel, vData, vMark1, vMark2, seq) or bWaveUpdate      
         # check if sequence mode
         if seq is not None:
             # if not final seq call, just return here
             self.bSeqUpdate = self.bSeqUpdate or bWaveUpdate
-            if (seq+1) < n_seq:
+            if seq + 1 < n_seq:
                 return
             # final call, check if sequence has changed
-            self.log('bSeqUpdate=%s' % str(self.bSeqUpdate))
             if self.bSeqUpdate or n_seq != self.nOldSeq:
                 # create sequence list, first clear to reset old values
                 if self.bFastSeq:
-                # notice that the list of the names has already been updated
+                    # notice that the list of the names has already been updated
                     self.assembleSequence()
                 else:
                     self.writeAndLog('SEQ:LENG 0')
