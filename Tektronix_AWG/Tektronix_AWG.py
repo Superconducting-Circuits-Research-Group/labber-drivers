@@ -147,14 +147,21 @@ class Driver(VISA_Driver):
         # if final call and wave is updated, send it to AWG
         if self.isFinalCall(options) and self.bWaveUpdated:
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
+            mode = self.getValue('Run mode')
+            self.debugPrint(mode)
             if self.isHardwareLoop(options):
+                if mode == 'Continuous':
+                    self.setValue('Run mode', 'Sequence')
                 seq = seq_no
                 self.reportStatus('Sending waveform (%d/%d)' % (seq_no+1, n_seq))
             else:
+                if mode == 'Sequence':
+                    self.setValue('Run mode', 'Continuous')
                 seq = None
                 if len(self.lOldU16) > 1:
                     self.lOldU16 = [[np.array([], dtype=np.uint16) for n1 in range(self.nCh)]]
             bStart = not self.isHardwareTrig(options)
+            self.debugPrint(self.getValue('Run mode'))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
         return value
 
@@ -192,11 +199,12 @@ class Driver(VISA_Driver):
                     self.bSeqUpdate = True
             self.decomposeWaveformAndSendFragments(seq)
         else:
-            if seq is None:
-                mode = self.getValue('Run mode')
-                if mode == 'Sequence':
-                    raise InstrumentDriver.Error('Not hardware loop mode, please change run mode to be "Continuous"!')
+            # if seq is None:
+                # mode = self.getValue('Run mode')
+                # if mode == 'Sequence':
+                    # raise InstrumentDriver.Error('Not hardware loop mode, please change run mode to be "Continuous"!')
             # go through all channels
+            self.debugPrint(self.bFastSeq)
             for n in range(self.nCh):
                 # channels are numbered 1-4
                 channel = n + 1
