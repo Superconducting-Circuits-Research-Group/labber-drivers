@@ -36,6 +36,7 @@ class Driver(VISA_Driver):
         self.bUsesub = True
         self.writeAndLog('WLIS:WAV:DEL ALL', bCheckError = False)
         self.writeAndLog('SLIS:SUBS:DEL ALL', bCheckError = False)
+        self.log('recreate lStoredNames!')
         self.lStoredNames = [] # used to record the name of the waveforms that will be used to construct the sequence in fast sequence mode
         self.lStoredSubseq = []
         self.lValidChannel = []
@@ -56,6 +57,7 @@ class Driver(VISA_Driver):
 
     def initSetConfig(self):
         """This function is run before setting values in Set Config"""
+        self.log('initSetConfig')
         # turn off run mode
         self.writeAndLog(':AWGC:STOP;')
         # init vectors with old values
@@ -148,7 +150,6 @@ class Driver(VISA_Driver):
         if self.isFinalCall(options) and self.bWaveUpdated:
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             mode = self.getValue('Run mode')
-            self.debugPrint(mode)
             if self.isHardwareLoop(options):
                 if mode == 'Continuous':
                     self.setValue('Run mode', 'Sequence')
@@ -161,7 +162,6 @@ class Driver(VISA_Driver):
                 if len(self.lOldU16) > 1:
                     self.lOldU16 = [[np.array([], dtype=np.uint16) for n1 in range(self.nCh)]]
             bStart = not self.isHardwareTrig(options)
-            self.debugPrint(self.getValue('Run mode'))
             self.sendWaveformAndStartTek(seq=seq, n_seq=n_seq, bStart=bStart)
         return value
 
@@ -204,7 +204,6 @@ class Driver(VISA_Driver):
                 # if mode == 'Sequence':
                     # raise InstrumentDriver.Error('Not hardware loop mode, please change run mode to be "Continuous"!')
             # go through all channels
-            self.debugPrint(self.bFastSeq)
             for n in range(self.nCh):
                 # channels are numbered 1-4
                 channel = n + 1
@@ -244,8 +243,6 @@ class Driver(VISA_Driver):
             self.askAndLog('*OPC?')
 
             self.log('Sequence has been established!')
-            self.debugPrint(self.lStoredSubseq)
-            # raise InstrumentDriver.Error()
             
             # turn on sequence mode
             self.writeAndLog(':AWGC:RMOD SEQ')
@@ -515,7 +512,7 @@ class Driver(VISA_Driver):
                     # self.log('mDataMark = %s' % str(mDataMark))
                     # self.log('mDataMarkTot = %s' % str(mDataMarkTot))
                     mDataMarkTot = np.concatenate((mDataMarkTot, mDataMark))
-             
+                    
         # chunk waveform
         Len = mDataMarkTot.shape[1]
         if Len > 50000:
@@ -547,10 +544,10 @@ class Driver(VISA_Driver):
                 ThisLength = end - start
                 # pick up from the 'start' element to 'end - 1' element
                 ThisPulse = mDataMarkTot[3 * nC:3 * nC + 3, start:end]
-                if ThisLength != len(ThisPulse[0, :]):
-                    self.debugPrint(end)
-                    self.debugPrint(start)
-                    self.debugPrint(len(ThisPulse[0, :]))
+                # if ThisLength != len(ThisPulse[0, :]):
+                    # self.debugPrint(end)
+                    # self.debugPrint(start)
+                    # self.debugPrint(len(ThisPulse[0, :]))
                 if np.all(np.diff(ThisPulse) == 0):
                 # constant pulse for this channels
                     DataV = ThisPulse[0, 0]
@@ -624,7 +621,6 @@ class Driver(VISA_Driver):
         mNames = np.array(lNames)
         lSubseq = []
         lNames = [[i] for i in mNames[:,0]]
-        
         ThisSubseq = mNames[:, 0]
         label = hash(ThisSubseq.tostring())
         label = str(label)
@@ -652,8 +648,7 @@ class Driver(VISA_Driver):
                     name = ThisSubseq[n2]
                     if self.bUsesub:
                         self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
-        lSubseq = lSubseq + [SubseqName]
-            
+        lSubseq = lSubseq + [SubseqName]  
         
         for nF in range(NumFrag - 1):
             name = mNames[0, nF + 1]
@@ -682,11 +677,14 @@ class Driver(VISA_Driver):
                 else:
                     lSubseq[-1] = 'R' + str(2) + LastSubseq
                     
-            else:  
+            else:
                 ThisSubseq = mNames[:, nF + 1]
                 label = hash(ThisSubseq.tostring())
                 label = str(label)
-                SubseqName = 'Fragment_' + label        
+                SubseqName = 'Fragment_' + label
+                for n2, channel in enumerate(lValidChannel):
+                    name = ThisSubseq[n2]
+                    lNames[n2] = lNames[n2] + [name]
                 if SubseqName not in self.dSubseqList:
                 # not exist. create then store it.
                     if self.bUsesub:
@@ -696,7 +694,6 @@ class Driver(VISA_Driver):
                     self.dSubseqList.update(NewDict)
                     for n2, channel in enumerate(lValidChannel):
                         name = ThisSubseq[n2]
-                        lNames[n2] = lNames[n2] + [name]
                         if self.bUsesub:
                             self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
                 else:
@@ -709,11 +706,13 @@ class Driver(VISA_Driver):
                             self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
                         for n2, channel in enumerate(lValidChannel):
                             name = ThisSubseq[n2]
-                            lNames[n2] = lNames[n2] + [name]
                             if self.bUsesub:
                                 self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"' % (1, channel, SubseqName, name))
+
+                        
                 lSubseq = lSubseq + [SubseqName]
-            
+      
+        lNames = np.array(lNames).transpose().tolist() # transpose the list, so that the sublists are divided by different fragments (therefore different sublists are different elements in the whole sequence)    
         # compare to previous trace
         if lValidChannel != self.lValidChannel or lNames != self.lStoredNames[seq] or lSubseq != self.lStoredSubseq[seq]:
             self.bSeqUpdate = True
@@ -721,12 +720,9 @@ class Driver(VISA_Driver):
             if len(lNames) > 1:
                 if len(lNames[0]) != len(lNames[1]):
                     raise InstrumentDriver.Error('Some fragments are missing. Check code.')
-            lNames = np.array(lNames).transpose().tolist() # transpose the list, so that the sublists are divided by different fragments (therefore different sublists are different elements in the whole sequence)
-            self.debugPrint(len(self.lStoredNames))
-            self.debugPrint(seq)
             self.lStoredSubseq[seq] = lSubseq
             self.lStoredNames[seq] = lNames
-            
+
     
     def createAndSendFragment(self, vFragment, channel, name = None, vU16 = None):
         """ determine the name of the pulse and send it to the AWG """
