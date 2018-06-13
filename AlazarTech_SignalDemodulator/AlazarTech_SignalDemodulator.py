@@ -551,9 +551,13 @@ class Driver(InstrumentDriver.InstrumentWorker):
         length = min(length, recordLength - skip)
 
         # calculate cos/sin vectors, allow segmenting
-        if dt != self._prev_dt or \
+        if not hasattr(self, '_prev_dt') or \
+                dt != self._prev_dt or \
+                not hasattr(self, '_prev_skip') or \
                 skip != self._prev_skip or \
+                not hasattr(self, '_prev_length') or \
                 length != self._prev_length or \
+                not hasattr(self, '_prev_dFreq') or \
                 dFreq != self._prev_dFreq:
             vTime = dt * (skip + np.arange(length, dtype=np.float32))
             self._vExp = np.exp(2.j * np.pi * vTime * dFreq).view('complex64')
