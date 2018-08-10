@@ -48,6 +48,10 @@ class Driver(VISA_Driver):
             self.log('value = %s' % str(value))
             value = int(value)
             self.writeAndLog(':SENS:SWE:POIN %s' % str(value))
+        elif quant.name in ('# of averages',):
+            self.log('value = %s' % str(value))
+            value = int(value)
+            self.writeAndLog(':SENS:AVER:COUN %s' % str(value))
         else:
             # run standard VISA case 
             value = VISA_Driver.performSetValue(self, quant, value, sweepRate, options)
