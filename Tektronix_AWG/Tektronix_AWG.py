@@ -136,7 +136,6 @@ class Driver(VISA_Driver):
         elif quant.name in ('Run'):
             status = self.askAndLog('AWGC:RST?', bCheckError=False)
             if value:
-                self.writeAndLog(':AWGC:RUN')
                 # turn on channels again, to avoid issues when switch run mode
                 sOutput = ''
                 for n, bUpdate in enumerate(self.lInUse):
@@ -144,6 +143,16 @@ class Driver(VISA_Driver):
                         sOutput += (':OUTP%d:STAT 1;' % (n + 1))
                 if sOutput != '':
                     self.writeAndLog(sOutput)
+                self.writeAndLog(':AWGC:RUN')
+                esr = self.askAndLog('*ESR?')
+                stb = self.askAndLog('*STB?')
+                if int(esr) & 0b0001000:
+                    raise InstrumentDriver.Error('Make sure that what '
+                            'you are trying to do is compatible with '
+                            'AWG specifications. The Standard Event '
+                            ' Status Register (SESR) value is %s '
+                            'and the Status Byte Register (SBR) value '
+                            'is %s.' % (bin(int(esr)), bin(int(stb))))
             else:
                 # stop AWG
                 self.writeAndLog(':AWGC:STOP;')
@@ -258,7 +267,7 @@ class Driver(VISA_Driver):
                 self.nOldSeq = n_seq
             
             self.askAndLog('*OPC?')
-
+                
             self.log('Sequence has been established!')
             
             # turn on sequence mode
@@ -329,7 +338,7 @@ class Driver(VISA_Driver):
         
     def createWaveformOnTek(self, channel, length, seq=None, bOnlyClear=False):
         """Remove old and create new waveform on the Tek. The waveform is named
-        by the channel nunber"""
+        by the channel number"""
         self.log('In createWaveformOnTek, seq = %s' % str(seq))
         if seq is None:
             name = 'Labber_%d' % channel
