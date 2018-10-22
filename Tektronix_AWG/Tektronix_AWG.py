@@ -357,7 +357,7 @@ class Driver(VISA_Driver):
             self.writeAndLog(':WLIS:WAV:NEW "%s",%d,INT' % (name, length))
  
     def sendWaveformToTek(self, channel, vData, vMark1, vMark2, seq=None):
-        """Send waveform to Tek"""
+        """Send a waveform to Tek."""
         # check if sequence
         if seq is None:
             iSeq = 0
@@ -461,7 +461,8 @@ class Driver(VISA_Driver):
             if len(vMark1) == 0 and len(vMark2) == 0:
                 # if channel in use, turn off, clear, go to next channel
                 if self.lInUse[n]:
-                    self.createWaveformOnTek(channel, 0, seq, bOnlyClear=True)
+                    self.createWaveformOnTek(channel, 0, seq,
+                            bOnlyClear=True)
                     self.lOldU16[iSeq][n] = np.array([], dtype=np.uint16)
                     self.lInUse[n] = False
                 return (False, [])
@@ -492,8 +493,7 @@ class Driver(VISA_Driver):
         # channel in use, mark
         self.lInUse[n] = True
         return (True, mDataMark)
-           
-    
+
     def scaleWaveformAndMarkerToU16(self, vData, vMark1, vMark2, channel):
         # get range and scale to U16
         Vpp = self.getValue('Ch%d - Range' % channel)
@@ -507,8 +507,30 @@ class Driver(VISA_Driver):
                 vU16 += 2**(14 + m) * vMU16
         return vU16
     
+    def _waveform_name(self, mDataMark, channel):
+        vData = mDataMark[0,:]
+        vMark1 = mDataMark[1,:]
+        vMark2 = mDataMark[2,:]
+
+        Vpp = self.getValue('Ch%d - Range' % channel)
+        unique = np.unique(mDataMark)
+        if unique.size == 1:
+            # constant pulse
+            if unique == 0:
+                # all zeros
+                name = 'zeros_%s' % str(len(vData))
+            else:
+                name = ('const_%s_%s_%s_%s_%d' 
+                        % (str(Vpp), str(vData[0]), str(vMark1[0]), 
+                           str(vMark2[0]), len(vData)))
+        else:
+            # almost unique label for different pulses
+            label = str(hash(mDataMark.tostring()))[::3]
+            name = 'pulse_%s_%s_%d' % (str(Vpp), label, len(vData))
+        return name
+    
     def decomposeWaveformAndSendFragments(self, seq):
-        """"decompose the waveform into fragments (to assemble a sequence)"""
+        """Decompose the waveform into fragments to assemble a sequence."""
         mDataMarkTot = 0 # initial value
         lValidChannel = []
         for n in range(self.nCh):
@@ -553,118 +575,74 @@ class Driver(VISA_Driver):
             Vpp = self.getValue('Ch%d - Range' % channel)
             for nF in range(NumFrag):
                 start = vNode[nF]
-                end = vNode[nF + 1]
+                end = vNode[nF+1]
                 ThisLength = end - start
                 # pick up from the 'start' element to 'end - 1' element
                 ThisPulse = mDataMarkTot[3*nC:3*nC+3,start:end]
-                if np.all(np.diff(ThisPulse) == 0):
-                    # constant pulse for this channels
-                    DataV = ThisPulse[0,0]
-                    Mark1V = ThisPulse[1,0]
-                    Mark2V = ThisPulse[2,0]
-                    bWaveformsExist = True
-
-                    if [DataV, Mark1V, Mark2V] == [0, 0, 0]:
-                        # all zeros, check whether there are waveforms
-                        # in the waveform list ( length = 1000 )
-                        testname = 'zero_' + str(ThisLength)
-                    else:
-                        # other constant pulses
-                        testname = ('const_Vpp_' + str(Vpp) + '_' +
-                                str(DataV) + '_' + str(Mark1V) + '_' +
-                                str(Mark2V) + '_'  + str(ThisLength))
-                    if not testname in self.lWaveform:
-                        bWaveformsExist = False
-                    # store names
-                    name = testname
-
-                    if not bWaveformsExist:
-                    # send waveforms
-                        name = self.createAndSendFragment(ThisPulse, channel)
+                name = self._waveform_name(ThisPulse, channel)
+                if name not in self.lWaveform:
+                    # send waveform
+                    self.createAndSendFragment(ThisPulse, channel)
+                    self.lWaveform = self.lWaveform + [name]
+                elif name.startswith('pulse'):
+                    if name not in self.dNonConstantPulses:
+                        self.dNonConstantPulses[name] = ThisPulse
+                        # send waveform
+                        self.createAndSendFragment(ThisPulse, channel)
                         self.lWaveform = self.lWaveform + [name]
-                    # store names        
-                    sThisLength = str(ThisLength)
-                    lNames[nC] = lNames[nC] + [name]
-                           
-                else:                
-                    # other complex shape pulses
-                    bWaveformsExist = True
-                    # almost unique label for different pulses
-                    label = str(hash(ThisPulse.tostring()))[::3]
-                    testname = ('pulse_Vpp_' + str(Vpp) + '_' + label +
-                            '_' + str(ThisLength))
-                        
-                    if not testname in self.lWaveform:
-                        bWaveformsExist = False
-                        
-                    # store the name
-                    if not bWaveformsExist:
-                        # not exist. create then store it.
-                        name = self.createAndSendFragment(ThisPulse, channel)
-                        self.lWaveform = self.lWaveform + [name]
-                        lNames[nC] = lNames[nC] + [name]
-                        if testname.startswith('pulse'):
-                            NewDict = {name: ThisPulse}
-                            self.dNonConstantPulses.update(NewDict)
-                    elif testname.startswith('pulse'):
-                        # the name exists for this unknown pulse;
-                        # check whether the pulses are the same.
-                        if np.all(self.dNonConstantPulses[testname] != ThisPulse):
-                            time = self.askAndLog('SYST:TIME?',
-                                    bCheckError=False)
-                            NewName = 'pulse_' + time
+                    elif np.any(self.dNonConstantPulses[name] != ThisPulse):
+                        k = 1
+                        testname = '%s_%d' % (name, k)
+                        while testname in self.dNonConstantPulses and \
+                                np.any(self.dNonConstantPulses[testname] !=
+                                ThisPulse):
+                            k += 1
+                            testname = '%s_%d' % (name, k)
+                        name = testname
+                        if name not in self.dNonConstantPulses:
+                            self.dNonConstantPulses[name] = ThisPulse
+                            # send waveform
                             self.createAndSendFragment(ThisPulse,
-                                    channel, name=NewName)
-                            self.lWaveform = self.lWaveform + [NewName]
-                            lNames[nC] = lNames[nC] + [NewName]
-                        else:
-                            # exist. store it.
-                            lNames[nC] = lNames[nC] + [testname]
-                    else: 
-                        # the name exists for this constant pulse; store it.
-                        lNames[nC] = lNames[nC] + [testname]
-        
+                                    channel, name)
+                            self.lWaveform = self.lWaveform + [name]
+                # store name
+                lNames[nC] = lNames[nC] + [name]
+
         # create subsequence
         mNames = np.array(lNames)
-        lSubseq = []
         lNames = [[i] for i in mNames[:,0]]
         ThisSubseq = mNames[:,0]
-        label = str(hash(ThisSubseq.tostring()))
-        SubseqName = 'Fragment_' + label        
+ 
+        SubseqName = 'Fragment_%s' % str(hash(ThisSubseq.tostring()))
+        # the name exists for this subsequence;
+        # check whether the subsequences are the same.        
+        if SubseqName in self.dSubseqList and \
+                np.any(self.dSubseqList[SubseqName] != ThisSubseq):
+            k = 1
+            testname = '%s_%d' % (SubseqName, k)
+            while testname in self.dSubseqList and \
+                    np.any(self.dSubseqList[SubseqName] != ThisSubseq):
+                k += 1
+                testname = '%s_%d' % (SubseqName, k)
+            SubseqName = testname
+         
         if SubseqName not in self.dSubseqList:
-        # not exist. create then store it.
+            # does not exist; create then store it
+            self.dSubseqList[SubseqName] = ThisSubseq
             if self.bUsesub:
-                self.writeAndLog(':SLIS:SUBS:DEL "%s"; *CLS'
+                self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
                         % SubseqName, bCheckError=False)
-                self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
-            NewDict = {SubseqName: ThisSubseq}
-            self.dSubseqList.update(NewDict)
-            for n2, channel in enumerate(lValidChannel):
-                name = ThisSubseq[n2]
-                if self.bUsesub:
-                    self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"'
-                            % (1, channel, SubseqName, name))
-        else:
-            # the name exists for this subsequence;
-            # check whether the subsequences are the same.
-            if np.all(self.dSubseqList[SubseqName] != ThisSubseq):
-                time = self.askAndLog('SYST:TIME?', bCheckError=False)
-                SubseqName = 'Fragment_' + time
-                if self.bUsesub:
-                    self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
-                            % SubseqName, bCheckError=False)
-                    self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;' % (SubseqName, 1))
-                for n2, channel in enumerate(lValidChannel):
-                    name = ThisSubseq[n2]
-                    if self.bUsesub:
-                        self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"'
-                                % (1, channel, SubseqName, name))
-        lSubseq = lSubseq + [SubseqName]  
+                self.writeAndLog(':SLIS:SUBS:NEW "%s",%d' % (SubseqName, 1))
+                for k, channel in enumerate(lValidChannel):
+                    self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s","%s"'
+                            % (1, channel, SubseqName, ThisSubseq[k]))
+
+        lSubseq = [SubseqName]  
         
         for nF in range(NumFrag - 1):
-            name = mNames[0, nF + 1]
+            name = mNames[0,nF+1]
             # check whether two subsequences are the same
-            if np.all(mNames[:, nF] == mNames[:, nF + 1]):
+            if np.all(mNames[:,nF] == mNames[:,nF+1]):
                 LastName = lNames[0][-1]
                 if LastName.startswith('R'):
                     # find repeat number
@@ -672,9 +650,9 @@ class Driver(VISA_Driver):
                     while LastName[ind].isnumeric():
                         ind += 1
                     LoopNum = int(LastName[1:ind]) + 1
-                    lNames[0][-1] = 'R' + str(LoopNum) + name
+                    lNames[0][-1] = 'R%d%s' % (LoopNum, name)
                 else:
-                    lNames[0][-1] = 'R' + str(2) + name
+                    lNames[0][-1] = 'R2%s' % name
                     
                 LastSubseq = lSubseq[-1]
                 if LastSubseq.startswith('R'):
@@ -684,48 +662,35 @@ class Driver(VISA_Driver):
                         ind += 1
                     LoopNum = int(LastSubseq[1:ind]) + 1
                     name = LastSubseq[ind:]
-                    lSubseq[-1] = 'R' + str(LoopNum) + name
+                    lSubseq[-1] = 'R%d%s' % (LoopNum, name)
                 else:
-                    lSubseq[-1] = 'R' + str(2) + LastSubseq
-                    
+                    lSubseq[-1] = 'R2%s' % name
             else:
                 ThisSubseq = mNames[:,nF+1]
-                label = hash(ThisSubseq.tostring())
-                label = str(label)
-                SubseqName = 'Fragment_' + label
+                SubseqName = 'Fragment_%s' % str(hash(ThisSubseq.tostring()))
                 for n2, channel in enumerate(lValidChannel):
                     name = ThisSubseq[n2]
                     lNames[n2] = lNames[n2] + [name]
+                if SubseqName in self.dSubseqList and \
+                        np.any(self.dSubseqList[SubseqName] != ThisSubseq):
+                    k = 1
+                    testname = '%s_%d' % (SubseqName, k)
+                    while testname in self.dSubseqList and \
+                            np.any(self.dSubseqList[SubseqName] != ThisSubseq):
+                        k += 1
+                        testname = '%s_%d' % (SubseqName, k)
+                    SubseqName = testname
+                 
                 if SubseqName not in self.dSubseqList:
-                    # does not exist; create then store it.
+                    # does not exist; create then store it
+                    self.dSubseqList[SubseqName] = ThisSubseq
                     if self.bUsesub:
                         self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
-                                % SubseqName, bCheckError=False)
-                        self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;'
-                                % (SubseqName, 1))
-                    NewDict = {SubseqName: ThisSubseq}
-                    self.dSubseqList.update(NewDict)
-                    for n2, channel in enumerate(lValidChannel):
-                        name = ThisSubseq[n2]
-                        if self.bUsesub:
-                            self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"'
-                                    % (1, channel, SubseqName, name))
-                else:
-                    # the name exists for this subsequence. check whether
-                    # the subsequences are the same.
-                    if np.all(self.dSubseqList[SubseqName] != ThisSubseq):
-                        time = self.askAndLog('SYST:TIME?', bCheckError=False)
-                        SubseqName = 'Fragment_' + time
-                        if self.bUsesub:
-                            self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
-                                    % SubseqName, bCheckError=False)
-                            self.writeAndLog(':SLIS:SUBS:NEW "%s",%d;'
-                                    % (SubseqName, 1))
-                        for n2, channel in enumerate(lValidChannel):
-                            name = ThisSubseq[n2]
-                            if self.bUsesub:
-                                self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s", "%s"'
-                                        % (1, channel, SubseqName, name))
+                            % SubseqName, bCheckError=False)
+                        self.writeAndLog(':SLIS:SUBS:NEW "%s",%d' % (SubseqName, 1))
+                        for k, channel in enumerate(lValidChannel):
+                            self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s","%s"'
+                                    % (1, channel, SubseqName, ThisSubseq[k]))
 
                 lSubseq = lSubseq + [SubseqName]
 
@@ -745,33 +710,16 @@ class Driver(VISA_Driver):
             self.lStoredSubseq[seq] = lSubseq
             self.lStoredNames[seq] = lNames
 
-    def createAndSendFragment(self, vFragment, channel, name=None, vU16=None):
+    def createAndSendFragment(self, mDataMark, channel, name=None, vU16=None):
         """Determine the name of the pulse and send it to the AWG."""
-        mDataMark = vFragment
         vData = mDataMark[0,:]
         vMark1 = mDataMark[1,:]
         vMark2 = mDataMark[2,:]
         if name is None:
-            Vpp = self.getValue('Ch%d - Range' % channel)
-            if np.unique(mDataMark).size == 1:
-                # constant pulse
-                if [vData[0], vMark1[0], vMark2[0]] == [0, 0, 0]:
-                    # all zeros
-                    name = 'zero_' + str(len(vData))
-                else:
-                    name = ('const_Vpp_' + str(Vpp) + '_' + 
-                            str(vData[0]) + '_' + str(vMark1[0]) + 
-                            '_' + str(vMark2[0]) + '_' + str(len(vData)))
-            else:
-                # almost unique label for different pulses
-                label = str(hash(mDataMark.tostring()))
-                label = label[::3]
-                name = ('pulse_Vpp_' + str(Vpp) + '_' + label + '_' +
-                        str(len(vData)))
+            name = self._waveform_name(mDataMark, channel)
         
         if not self.bIsStopped:
             self._stop()
-        
         if vU16 is None:
             # create binary data as bytes with header    
             vU16 = self.scaleWaveformAndMarkerToU16(vData,
@@ -782,22 +730,20 @@ class Driver(VISA_Driver):
         # send to tek, start by turning off output
         self.writeAndLog(':OUTP%d:STAT 0' % channel)    
         # remove old waveform, ignoring errors, then create new
-        self.writeAndLog(':WLIS:WAV:DEL "%s";*CLS' % name, bCheckError=False)
+        self.writeAndLog(':WLIS:WAV:DEL "%s";*CLS' % name,
+                bCheckError=False)
         self.writeAndLog(':WLIS:WAV:NEW "%s",%d,INT' % (name, length))
-        sname = name.encode()
-        sSend = b':WLIS:WAV:DATA "%s",%d,%d,%s' % (sname, start, length,
-                 sHead + vU16[start:start+length].tobytes())
+        sSend = b':WLIS:WAV:DATA "%s",%d,%d,%s' % (name.encode(),
+                start, length, sHead + vU16[start:start+length].tobytes())
         self.write_raw(sSend)
-        return name
 
     def assembleSequence(self):
-        """assemble the fragment waveforms into a sequence"""
+        """Assemble the fragment waveforms into a sequence."""
         self.writeAndLog('SEQ:LENG 0')
         lFlattenNames = [item for sublist in self.lStoredNames
                          for item in sublist]
         lFlattenSubseq = [item for sublist in self.lStoredSubseq
                          for item in sublist]
-        
         if self.bUsesub:
             seq_len = len(lFlattenSubseq)
         else:
@@ -840,7 +786,7 @@ class Driver(VISA_Driver):
                         sSend += (':SEQ:ELEM%d:LOOP:COUNT %d;'
                                 % (n1 + 1, loopnum))
         
-            sSend += ':SEQ:ELEM%d:TWA 0;' % (n1 + 1)
+            sSend += ':SEQ:ELEM%d:TWA 0' % (n1 + 1)
             self.write_raw(sSend.encode())
 
         # for last element, set jump to first
