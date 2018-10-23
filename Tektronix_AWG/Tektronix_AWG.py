@@ -17,8 +17,6 @@ class Driver(VISA_Driver):
 
     def _clear(self):
         self.bWaveUpdated = False
-        self.bFastSeq = False
-        self.bUsesub = True
         self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16)
                        for _ in range(self.nCh)]]
@@ -29,7 +27,7 @@ class Driver(VISA_Driver):
         self.lWaveform = [] # used to record which waveforms have been
         # created on the AWG in fast sequence mode
         self.dSubseqList = {}
-        self.dNonConstantPulses = {} # used to record non-constant
+        self.dPulses = {} # used to record non-constant
         # clear old waveforms
         self.lInUse = [False] * self.nCh
 
@@ -66,6 +64,8 @@ class Driver(VISA_Driver):
         self._stop()
         self.writeAndLog('WLIS:WAV:DEL ALL', bCheckError=False)
         self.writeAndLog('SLIS:SUBS:DEL ALL', bCheckError=False)
+        self.bFastSeq = False
+        self.bSubSeq = False
         self._clear()
         for n in range(self.nCh):
             self.createWaveformOnTek(n + 1, 0, bOnlyClear=True)
@@ -108,13 +108,13 @@ class Driver(VISA_Driver):
                 mode = self.getValue('Sequence transfer mode')
                 if mode == 'Subwaveforms':
                     self.bFastSeq = True
-                    self.bUsesub = False
+                    self.bSubSeq = False
                 elif mode == 'Subsequences':
                     self.bFastSeq = True
-                    self.bUsesub = True
+                    self.bSubSeq = True
                 else:
                     self.bFastSeq = False
-                    self.bUsesub = False
+                    self.bSubSeq = False
                 # if first call, clear sequence and create buffer
                 if seq_no == 0:
                     # variable for keeping track of sequence updating
@@ -130,10 +130,10 @@ class Driver(VISA_Driver):
                 # setting
                 self._stop()
                 self.bFastSeq = False
-                self.bUsesub = False
+                self.bSubSeq = False
             else:
                 self.bFastSeq = False
-                self.bUsesub = False
+                self.bSubSeq = False
             
         if quant.name in ('Ch 1', 'Ch 2', 'Ch 3', 'Ch 4',
                           'Ch 1 - Marker 1', 'Ch 1 - Marker 2',
@@ -166,10 +166,13 @@ class Driver(VISA_Driver):
             else:
                 # stop AWG
                 self._stop()
-        elif quant.name in ('Hardware loop forced stop'):
+        elif quant.name == 'Hardware loop forced stop':
             self._stop()
             value = True
-        elif quant.name in ('Sequence transfer mode'):
+        elif quant.name == 'Sequence transfer mode':
+            if not hasattr(self, '_seqMode') or self._seqMode != value:
+                self._seqMode = value
+                self._clear()
             quant.setValue(value)
         else:
             # for all other cases, call VISA driver
@@ -592,23 +595,23 @@ class Driver(VISA_Driver):
                 if name not in self.lWaveform:
                     send = True
                 elif name.startswith('pulse'):
-                    if name not in self.dNonConstantPulses:
+                    if name not in self.dPulses:
                         send = True
-                    elif np.any(self.dNonConstantPulses[name] != thisPulse):
+                    elif np.any(self.dPulses[name] != thisPulse):
                         k = 1
                         testname = '%s_%d' % (name, k)
-                        while testname in self.dNonConstantPulses and \
-                                np.any(self.dNonConstantPulses[testname] !=
+                        while testname in self.dPulses and \
+                                np.any(self.dPulses[testname] !=
                                 thisPulse):
                             k += 1
                             testname = '%s_%d' % (name, k)
-                        if testname not in self.dNonConstantPulses:
+                        if testname not in self.dPulses:
                             name = testname
                             send = True
                 if send:
                     # send waveform
                     self.createAndSendFragment(thisPulse, channel)
-                    self.dNonConstantPulses[name] = thisPulse
+                    self.dPulses[name] = thisPulse
                     self.lWaveform = self.lWaveform + [name]
                 # store name
                 lNames[nC] = lNames[nC] + [name]
@@ -634,7 +637,7 @@ class Driver(VISA_Driver):
         if SubseqName not in self.dSubseqList:
             # does not exist; create then store it
             self.dSubseqList[SubseqName] = ThisSubseq
-            if self.bUsesub:
+            if self.bSubSeq:
                 self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
                         % SubseqName, bCheckError=False)
                 self.writeAndLog(':SLIS:SUBS:NEW "%s",%d' % (SubseqName, 1))
@@ -688,7 +691,7 @@ class Driver(VISA_Driver):
                 if SubseqName not in self.dSubseqList:
                     # does not exist; create then store it
                     self.dSubseqList[SubseqName] = ThisSubseq
-                    if self.bUsesub:
+                    if self.bSubSeq:
                         self.writeAndLog(':SLIS:SUBS:DEL "%s";*CLS'
                             % SubseqName, bCheckError=False)
                         self.writeAndLog(':SLIS:SUBS:NEW "%s",%d' % (SubseqName, 1))
@@ -750,7 +753,7 @@ class Driver(VISA_Driver):
                          for item in sublist]
         lFlattenSubseq = [item for sublist in self.lStoredSubseq
                          for item in sublist]
-        if self.bUsesub:
+        if self.bSubSeq:
             seq_len = len(lFlattenSubseq)
         else:
             seq_len = len(lFlattenNames)
@@ -762,7 +765,7 @@ class Driver(VISA_Driver):
         self.reportStatus('Assembling sequence')
         self.writeAndLog('SEQ:LENG %d' % seq_len)
         for n1 in range(seq_len):
-            if self.bUsesub:
+            if self.bSubSeq:
                 name = lFlattenSubseq[n1]
                 loopnum = 1
                 if name.startswith('R'):
