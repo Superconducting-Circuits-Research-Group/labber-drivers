@@ -4,6 +4,7 @@ import InstrumentDriver
 from VISA_Driver import VISA_Driver
 import numpy as np
 
+
 class Driver(VISA_Driver):
     """This class implements the Tektronix AWG driver."""
 
@@ -12,8 +13,20 @@ class Driver(VISA_Driver):
         self.bIsStopped = True
 
     def _run(self):
+        self.askAndLog('*OPC?')
         self.writeAndLog(':AWGC:RUN')
         self.bIsStopped = False
+
+    def _error(self):
+        esr = self.askAndLog('*ESR?')
+        stb = self.askAndLog('*STB?')
+        if int(esr) & 0b0001000:
+            raise InstrumentDriver.Error('Make sure that what '
+                    'you are trying to do is compatible with '
+                    'AWG specifications. The Standard Event '
+                    'Status Register (SESR) value is %s '
+                    'and the Status Byte Register (SBR) value '
+                    'is %s.' % (bin(int(esr)), bin(int(stb))))
 
     def _clear(self):
         self.bWaveUpdated = False
@@ -47,7 +60,7 @@ class Driver(VISA_Driver):
         # start by calling the generic VISA open to make sure we have
         # a connection
         VISA_Driver.performOpen(self, options)
-        # check for strange bug by reading the status bit
+        # check for a strange bug by reading the status bit
         try:
             status = self.askAndLog('*STB?', bCheckError=False)
             status = int(status)
@@ -144,7 +157,6 @@ class Driver(VISA_Driver):
             quant.setValue(value)
             self.bWaveUpdated = True
         elif quant.name in ('Run'):
-            status = self.askAndLog('AWGC:RST?', bCheckError=False)
             if value:
                 # turn on channels again, to avoid issues when switch run mode
                 sOutput = ''
@@ -154,15 +166,7 @@ class Driver(VISA_Driver):
                 if sOutput != '':
                     self.writeAndLog(sOutput)
                 self._run()
-                esr = self.askAndLog('*ESR?')
-                stb = self.askAndLog('*STB?')
-                if int(esr) & 0b0001000:
-                    raise InstrumentDriver.Error('Make sure that what '
-                            'you are trying to do is compatible with '
-                            'AWG specifications. The Standard Event '
-                            'Status Register (SESR) value is %s '
-                            'and the Status Byte Register (SBR) value '
-                            'is %s.' % (bin(int(esr)), bin(int(stb))))
+                self._error()
             else:
                 # stop AWG
                 self._stop()
@@ -328,7 +332,7 @@ class Driver(VISA_Driver):
         # check if timeout occurred
         if nTry <= 0:
             # timeout
-            raise InstrumentDriver.Error('Cannot turn on Run mode')
+            raise InstrumentDriver.Error('Cannot turn on Run mode.')
         # turn on channels again, to avoid issues when turning on/off
         # run mode
         if sOutput != '':
