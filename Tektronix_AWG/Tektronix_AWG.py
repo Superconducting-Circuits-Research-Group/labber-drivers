@@ -18,9 +18,10 @@ class Driver(VISA_Driver):
         self.bIsStopped = False
 
     def _error(self):
+        self.askAndLog('*OPC?')
         esr = self.askAndLog('*ESR?')
-        stb = self.askAndLog('*STB?')
         if int(esr) & 0b0001000:
+            stb = self.askAndLog('*STB?')
             raise InstrumentDriver.Error('Make sure that what '
                     'you are trying to do is compatible with '
                     'AWG specifications. The Standard Event '
