@@ -173,7 +173,10 @@ class Sequence:
         if self.readout_delay > 0:
             delay = IdentityGate(width=self.readout_delay)
             self.add_gate_to_all(delay, dt=0)
-        self.add_gate_to_all(ReadoutGate(), dt=0, align='left')
+        if self.readout_delay < 0:
+            self.add_gate_to_all(ReadoutGate(), dt=self.readout_delay, align='left')
+        else:
+            self.add_gate_to_all(ReadoutGate(), dt=0, align='left')
 
         return self.sequences
 
