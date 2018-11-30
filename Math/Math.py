@@ -30,6 +30,10 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Perform the Get Value instrument operation"""
         if quant.name in ('First value',
                           'Last value',
+                          'Maximum',
+                          'Minimum',
+                          'Average',
+                          'Median',
                           'Difference',
                           'Ratio',
                           'Pairwise difference',
@@ -40,6 +44,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 value = traces[0]
             elif quant.name == 'Last value':
                 value = traces[-1]
+            elif quant.name == 'Maximum':
+                value = np.max(traces)
+            elif quant.name == 'Minimum':
+                value = np.min(traces)
+            elif quant.name == 'Average':
+                value = np.mean(traces)
+            elif quant.name == 'Median':
+                value = np.median(traces)
             else:
                 if not quant.name.startswith('Pairwise') and \
                         traces.size != 2:
