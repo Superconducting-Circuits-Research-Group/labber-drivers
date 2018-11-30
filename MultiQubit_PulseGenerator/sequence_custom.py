@@ -20,7 +20,7 @@ class CustomSequence(Sequence):
         pulse1.width = float(config['Number of points']) / float(config['Sample rate'])
         pulse3 = Pulse(shape=PulseShape.SQUARE)
         pulse3.amplitude = config['Parameter #1']
-        pulse3.width = config['Readout duration']
+        pulse3.width = config['Readout duration'] + float(config['Parameter #2'])
         self.add_gate_to_all(CustomGate(pulse1), t0=0)
         self.add_gate_to_all(Gate.Xp, dt=0)
         self.add_gate_to_all(CustomGate(pulse3), dt=0)

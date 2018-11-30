@@ -305,6 +305,7 @@ class Driver(VISA_Driver):
             self.writeAndLog(sOutput)
         # if not starting, make sure AWG is not running, then return
         if not bStart:
+            self.askAndLog('*OPC?')
             iRunState = int(self.askAndLog(':AWGC:RST?'))
             nTry = 1000
             while nTry and iRunState and not self.isStopped():
