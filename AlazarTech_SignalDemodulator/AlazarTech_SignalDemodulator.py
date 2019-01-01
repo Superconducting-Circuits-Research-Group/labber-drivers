@@ -159,7 +159,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
                      3.6E9, 4E9]
             SampleRateId = int(lFreq[sampleRateIndex])
             Decimation = 0
-        else:
+        elif self.getValue('Clock source') == '10 MHz Reference' and \
+                self.getModel() in ('9870'):
             # 10 MHz ref, use 1GHz rate + divider; divider must be 1, 2,
             # 4, or multiple of 10
             SampleRateId = int(1E9)
@@ -167,6 +168,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
                      500E3, 1E6, 2E6, 5E6, 10E6, 20E6, 50E6, 100E6,
                      250E6, 500E6, 1E9]
             Decimation = int(1E9 / lFreq[sampleRateIndex])
+        elif self.getValue('Clock source') in ('Slow External',
+                                               'Fast External') and \
+                self.getModel() in ('9870'):
+            SampleRateId = 0x00000040
+            lFreq = [1E3, 2E3, 5E3, 10E3, 20E3, 50E3, 100E3, 200E3,
+                     500E3, 1E6, 2E6, 5E6, 10E6, 20E6, 50E6, 100E6,
+                     250E6, 500E6, 1E9]
+            Decimation = 0
         try:
             self.dig.AlazarSetCaptureClock(SourceId, SampleRateId, 0,
                                            Decimation)
