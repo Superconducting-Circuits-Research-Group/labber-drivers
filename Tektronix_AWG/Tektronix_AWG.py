@@ -704,6 +704,7 @@ class Driver(VISA_Driver):
                         for k, channel in enumerate(lValidChannel):
                             self.writeAndLog(':SLIS:SUBS:ELEM%d:WAV%d "%s","%s"'
                                     % (1, channel, SubseqName, ThisSubseq[k]))
+                            self.askAndLog('*OPC?')
                             self.askAndLog(':SLIS:SUBS:ELEM%d:WAV%d? "%s"'
                             % (1, channel, SubseqName))
 
