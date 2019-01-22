@@ -84,8 +84,7 @@ class Driver(VISA_Driver):
             # if conversion to int failed, re-read instrument buffer to
             # clear
             sBuffer = self.read()
-            self.log('Extra data read from Tektronix AWG: %s, %s'
-                    % (bin(status), sBuffer))
+            self.log('Extra data read from Tektronix AWG: %s' % sBuffer)
         # get model name and number of channels
         sModel = self.getModel()
         self.nCh = 4 if sModel in ('5004', '5014') else 2
@@ -565,8 +564,8 @@ class Driver(VISA_Driver):
 
         # chunk waveform
         Len = mDataMarkTot.shape[1]
-        if Len > 40000:
-            FragmentSize = int(Len / 40)
+        if Len > 25000:
+            FragmentSize = int(Len / 25)
         elif Len > 5000:
             FragmentSize = 1000
         else:
