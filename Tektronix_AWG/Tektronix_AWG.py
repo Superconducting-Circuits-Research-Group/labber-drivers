@@ -285,7 +285,7 @@ class Driver(VISA_Driver):
                     for n1 in range(n_seq):               
                         for n2, bUpdate in enumerate(self.lInUse):
                             if bUpdate:
-                                name = 'Labber_%d_%d' % (n2 + 1, n1 + 1)
+                                name = 'wvfrm_ch%d_%05d' % (n2 + 1, n1 + 1)
                                 self.writeAndLog('SEQ:ELEM%d:WAV%d "%s"'
                                         % (n1 + 1, n2 + 1, name))
                         # don't wait for trigger 
