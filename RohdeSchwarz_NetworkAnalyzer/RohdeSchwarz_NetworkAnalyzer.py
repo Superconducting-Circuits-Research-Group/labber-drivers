@@ -82,6 +82,8 @@ class Driver(VISA_Driver):
                 bAverage = self.getValue('Average')
                 # wait for trace, either in averaging or normal mode
                 if bWaitTrace:
+                    model = self.getModel()
+                    self.log(model)
                     if bAverage:
                         nAverage = self.getValue('# of averages')
                         self.writeAndLog(':SENS:AVER:CLE;:ABOR;')
@@ -89,17 +91,22 @@ class Driver(VISA_Driver):
                         self.writeAndLog(':ABOR;:INIT:CONT OFF;:INIT:IMM;*OPC')
                     # wait some time before first check
                     self.wait(0.03)
-                    bDone = False
-                    while (not bDone) and (not self.isStopped()):
-                        # check if done
-                        if bAverage:
-                            sAverage = self.askAndLog('SENS:AVER:COUN:CURR?')
-                            bDone = (int(sAverage) >= nAverage)
-                        else:
-                            stb = int(self.askAndLog('*ESR?'))
-                            bDone = (stb & 1) > 0
-                        if not bDone:
-                            self.wait(0.1)
+                    if model.startswith('ZNB'):
+                        fSweepTime = float(self.askAndLog('SENS:SWE:TIME?'))
+                        fTotalTime = fSweepTime * nAverage
+                        self.wait(fTotalTime)
+                    else:
+                        bDone = False
+                        while (not bDone) and (not self.isStopped()):
+                            # check if done
+                            if bAverage:
+                                sAverage = self.askAndLog('SENS:AVER:COUN:CURR?')
+                                bDone = (int(sAverage) >= nAverage)
+                            else:
+                                stb = int(self.askAndLog('*ESR?'))
+                                bDone = (stb & 1) > 0
+                            if not bDone:
+                                self.wait(0.1)
                     # if stopped, don't get data
                     if self.isStopped():
                         self.writeAndLog('*CLS;:INIT:CONT ON;')
