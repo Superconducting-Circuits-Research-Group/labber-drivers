@@ -531,10 +531,18 @@ class Driver(VISA_Driver):
             if unique[0] == 0:
                 # all zeros
                 name = 'zeros_%d' % length
-            else:
-                name = 'const_%d_%s' % (length, str(unique[0]))
         else:
-            name = 'pulse_%d_ch%d_%05d' % (length, channel, idx)
+            uData = np.unique(mDataMark[0,:])
+            uMark1 = np.unique(mDataMark[1,:])
+            uMark2 = np.unique(mDataMark[2,:])
+            if uData.size == 1 and uMark1.size == 1 and uMark2.size == 1:
+                name = 'const_%d_%s_%s_%s' % (length,
+                    str(np.float(uData[0])),
+                    str(np.float(uMark1[0])),
+                    str(np.float(uMark2[0])))
+                name = name.replace('-', 'm').replace('.', 'p')
+            else:
+                name = 'pulse_%d_ch%d_%05d' % (length, channel, idx)
         return name
     
     def decomposeWaveformAndSendFragments(self, seq):
