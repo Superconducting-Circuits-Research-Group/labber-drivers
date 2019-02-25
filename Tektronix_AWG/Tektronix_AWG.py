@@ -43,12 +43,16 @@ class Driver(VISA_Driver):
                     'Status Register (SESR) value is %s '
                     'and the Status Byte Register (SBR) value '
                     'is %s.' % (bin(esr), bin(stb)))
-
-    def _clear(self):
+                    
+    def _clear_all(self):
         self.bWaveUpdated = False
-        self.nOldSeq = -1
         self.lOldU16 = [[np.array([], dtype=np.uint16)
                        for _ in range(self.nCh)]]
+        self.lInUse = [False] * self.nCh
+        self._clear()
+
+    def _clear(self):
+        self.nOldSeq = -1
         self.lStoredNames = [] # used to record the name of the waveforms 
         # that will be used to construct the sequence in fast sequence mode
         self.lStoredSubseq = []
@@ -57,8 +61,6 @@ class Driver(VISA_Driver):
         # created on the AWG in fast sequence mode
         self.dSubseqList = {}
         self.iPulseIdx = 0
-        # clear old waveforms
-        self.lInUse = [False] * self.nCh
 
     def _getTrigChannel(self, options):
         """Helper function, get trig channel for instrument, or None if N/A"""
@@ -95,7 +97,7 @@ class Driver(VISA_Driver):
         self.writeAndLog('SLIS:SUBS:DEL ALL', bCheckError=False)
         self.bFastSeq = False
         self.bSubSeq = False
-        self._clear()
+        self._clear_all()
         for n in range(self.nCh):
             self.createWaveformOnTek(n + 1, 0, bOnlyClear=True)
 
@@ -108,7 +110,7 @@ class Driver(VISA_Driver):
         """This function is run before setting values in Set Config"""
         # turn off run mode
         self._stop()
-        self._clear()
+        self._clear_all()
         for n in range(self.nCh):
             channel = n + 1
             self.setValue('Ch %d' % channel, [])
@@ -146,9 +148,10 @@ class Driver(VISA_Driver):
                     self.bSubSeq = False
                 # if first call, clear sequence and create buffer
                 if seq_no == 0:
-                    # variable for keeping track of sequence updating
                     self._stop()
-                    self.bSeqUpdate = False
+                    self.writeAndLog('WLIS:WAV:DEL ALL', bCheckError=False)
+                    self.writeAndLog('SLIS:SUBS:DEL ALL', bCheckError=False)
+                    self._clear()
                 # if different sequence length, re-create buffer
                 if seq_no == 0 and n_seq != len(self.lOldU16):
                     self.lOldU16 = [[np.array([], dtype=np.uint16)
@@ -251,10 +254,8 @@ class Driver(VISA_Driver):
                 if len(self.lStoredNames) != n_seq:
                     # recreate lStoredNames
                     self.lStoredNames = [[]] * n_seq
-                    self.bSeqUpdate = True
                 if len(self.lStoredSubseq) != n_seq:
                     self.lStoredSubseq = [[]] * n_seq
-                    self.bSeqUpdate = True
             self.decomposeWaveformAndSendFragments(seq)
         else:
             # go through all channels
@@ -269,11 +270,10 @@ class Driver(VISA_Driver):
         # check if sequence mode
         if seq is not None:
             # if not final seq call, just return here
-            self.bSeqUpdate = self.bSeqUpdate or bWaveUpdate
             if seq + 1 < n_seq:
                 return
             # final call, check if sequence has changed
-            if self.bSeqUpdate or n_seq != self.nOldSeq:
+            if bWaveUpdate or n_seq != self.nOldSeq:
                 # create sequence list, first clear to reset old values
                 if self.bFastSeq:
                     # notice that the list of the names has already been
@@ -697,7 +697,6 @@ class Driver(VISA_Driver):
         if lValidChannel != self.lValidChannel or \
                 lNames != self.lStoredNames[seq] or \
                 lSubseq != self.lStoredSubseq[seq]:
-            self.bSeqUpdate = True
             self.lValidChannel = lValidChannel
             if len(lNames) > 1:
                 if len(lNames[0]) != len(lNames[1]):
