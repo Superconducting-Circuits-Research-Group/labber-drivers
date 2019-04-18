@@ -5,8 +5,10 @@ import numpy as np
 
 __version__ = "0.0.1"
 
+
 class Error(Exception):
     pass
+
 
 class Driver(VISA_Driver):
     """ This class implements the Rohde&Schwarz Network Analyzer driver"""
@@ -18,13 +20,14 @@ class Driver(VISA_Driver):
         # calling the generic VISA open to make sure we have a connection
         VISA_Driver.performOpen(self, options=options)
 
-
     def performSetValue(self, quant, value, sweepRate=0.0, options={}):
-        """Perform the Set Value instrument operation. This function should
-        return the actual value set by the instrument"""
+        """
+        Perform the Set Value instrument operation. This function should
+        return the actual value set by the instrument.
+        """
 		# create new channels if needed
-        if quant.name in ('S11 - Enabled', 'S21 - Enabled', 'S12 - Enabled',
-                          'S22 - Enabled'):
+        if quant.name in ('S11 - Enabled', 'S21 - Enabled',
+                          'S12 - Enabled', 'S22 - Enabled'):
             # get updated list of measurements in use
             param = quant.name[:3]
             self.getActiveMeasurements()
@@ -45,11 +48,9 @@ class Driver(VISA_Driver):
             # do nothing
             pass
         elif quant.name in ('# of points',):
-            self.log('value = %s' % str(value))
             value = int(value)
             self.writeAndLog(':SENS:SWE:POIN %s' % str(value))
         elif quant.name in ('# of averages',):
-            self.log('value = %s' % str(value))
             value = int(value)
             self.writeAndLog(':SENS:AVER:COUN %s' % str(value))
         else:
@@ -57,12 +58,11 @@ class Driver(VISA_Driver):
             value = VISA_Driver.performSetValue(self, quant, value, sweepRate, options)
         return value
 
-
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation"""
         # check type of quantity
-        if quant.name in ('S11 - Enabled', 'S21 - Enabled', 'S12 - Enabled',
-                          'S22 - Enabled'):
+        if quant.name in ('S11 - Enabled', 'S21 - Enabled',
+                          'S12 - Enabled', 'S22 - Enabled'):
             # update list of channels in use
             self.getActiveMeasurements()
             # get selected parameter
@@ -77,13 +77,12 @@ class Driver(VISA_Driver):
                 # get trace name from parameter (use last trace in list)
                 sName = self.dMeasParam[quant.name][-1]
                 self.writeAndLog("CALC:PAR:SEL '%s'" % sName)
-                # if not in continous mode, trig from computer
+                # if not in continuous mode, trig from computer
                 bWaitTrace = self.getValue('Wait for new trace')
                 bAverage = self.getValue('Average')
                 # wait for trace, either in averaging or normal mode
                 if bWaitTrace:
                     model = self.getModel()
-                    self.log(model)
                     if bAverage:
                         nAverage = self.getValue('# of averages')
                         self.writeAndLog(':SENS:AVER:CLE;:ABOR;')
@@ -146,7 +145,6 @@ class Driver(VISA_Driver):
             # for all other cases, call VISA driver
             value = VISA_Driver.performGetValue(self, quant, options)
         return value
-        
 
     def getActiveMeasurements(self):
         """Retrieve and a list of measurement/parameters currently active"""
@@ -157,7 +155,7 @@ class Driver(VISA_Driver):
         # parse list, format is channel, parameter, ...
         self.dMeasParam = {}
         lAll = sAll.split(',')
-        nMeas = len(lAll)//2
+        nMeas = len(lAll) // 2
         for n in range(nMeas):
             sName = lAll[2*n] 
             sParam = lAll[2*n + 1]
@@ -167,7 +165,6 @@ class Driver(VISA_Driver):
             else:
                 # add to existing list
                 self.dMeasParam[sParam].append(sName)
-
 
 
 if __name__ == '__main__':

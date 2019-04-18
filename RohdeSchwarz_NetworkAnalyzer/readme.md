@@ -1,0 +1,1 @@
+Do not add selection channels such as `S11-Enabled` into *Step Sequence*.
