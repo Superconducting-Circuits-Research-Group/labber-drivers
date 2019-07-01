@@ -88,14 +88,25 @@ class Driver(VISA_Driver):
                         self.writeAndLog(':SENS:AVER:CLE;:ABOR;')
                     else:
                         self.writeAndLog(':ABOR;:INIT:CONT OFF;:INIT:IMM;*OPC')
+                        nAverage = 1
                     # wait some time before first check
-                    self.wait(0.03)
+                    self.wait(0.1)
+                    bDone = False
                     if model.startswith('ZNB'):
                         fSweepTime = float(self.askAndLog('SENS:SWE:TIME?'))
                         fTotalTime = fSweepTime * nAverage
                         self.wait(fTotalTime)
+                        if not bAverage:
+                            while (not bDone) and (not self.isStopped()):
+                                stb = int(self.askAndLog('*ESR?'))
+                                bDone = (stb & 1) > 0
+                                if not bDone:
+                                    self.wait(0.1)
+                        else:
+                            # This is a temporary hack as the returned
+                            # acquisition time seems to be off.                            
+                            self.wait(.1 * fTotalTime)
                     else:
-                        bDone = False
                         while (not bDone) and (not self.isStopped()):
                             # check if done
                             if bAverage:
