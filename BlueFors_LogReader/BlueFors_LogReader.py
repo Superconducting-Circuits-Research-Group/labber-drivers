@@ -14,7 +14,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         Parameters
         ----------
         filename_prefix : str
-            Filename prefix corresponding to the physical quantaty.
+            Filename prefix corresponding to the physical quantity.
 
         Returns
         -------
@@ -23,26 +23,24 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         Raises
         ------
-        RuntimeWarning
-            The timestamp for the last record is more than five minutes
-            old.
+        FileNotFoundError
+            No log file found.
         """
         # Get the list of files in the folder and return the one with
         # the most recent name.
         subfolders = sorted([f for f in os.listdir(self._path)
                     if not os.path.isfile(os.path.join(self._path, f))])
 
-        # Generate the log filename. Check two the most recent folders.
-        filename = ''.join([filename_prefix, subfolders[-1], '.log'])
-        full_filename = os.path.join(self._path, subfolders[-1], filename)
-        if not os.path.isfile(full_filename):
-            filename = ''.join([filename_prefix, subfolders[-2], '.log'])
-            prev_filename = os.path.join(self._path, subfolders[-2], filename)
-            if not os.path.isfile(prev_filename):
-                raise FileNotFoundError("No such log file: '%s'."
-                        % full_filename)
-            else:
-                full_filename = prev_filename
+        # Check the recent folders for the log file.
+        not_found = True
+        for i in range(-1, -len(subfolders) - 1, -1):
+            filename = ''.join([filename_prefix, subfolders[i], '.log'])
+            full_filename = os.path.join(self._path, subfolders[i], filename)
+            if os.path.isfile(full_filename):
+                not_found = False
+                break
+        if not_found:
+            return None
 
         # Read the last line in the log file.
         offset = 1024
@@ -71,12 +69,12 @@ class Driver(InstrumentDriver.InstrumentWorker):
         return line
 
     def _parseSimpleRecord(self, line=None):
-        """Parses a thermometer/flometer record.
+        """Parses a thermometer/flowmeter record.
 
         Parameters
         ----------
-        line : None, str, None
-            Single thermometer log record. If None (defult), the method
+        line : None or str
+            Single thermometer log record. If None (default), the method
             will return np.NaN.
 
         Returns
@@ -93,14 +91,14 @@ class Driver(InstrumentDriver.InstrumentWorker):
 
         Parameters
         ----------
-        line : str, None
+        line : str or None
             Single thermometer log record. If None (default), the method
             will return np.NaN.
         channel : {1, 2, 3, 5, 6}
             Maxigauge channel number.
         field: {'status', 'pressure'}
             Value to return, i.e., either the status of the gauge or
-            its pressure redading.
+            its pressure reading.
 
         Returns
         -------
@@ -186,7 +184,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
             line = self._readLastLine('Flowmeter ')
             # Extract the flow rate and convert it to mol/s from
             # mmol/s.
-            return self._parseSimpleRecord(line) / 1e3
+            return self._parseSimpleRecord(line) / 1.e3
         else:
             return quant.getValue()
 
