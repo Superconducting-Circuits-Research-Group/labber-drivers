@@ -30,50 +30,71 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation"""
         traceIn = self.getValue('Input data')
-        vThreshold = self.getValue('Threshold voltage)
+        vThresholdReal = self.getValue('Threshold voltage - real')
+        vThresholdImag = self.getValue('Threshold voltage - imag')
         vY = traceIn['y']
         dt = traceIn['dt']
         useI = bool(self.getValue('Use real signal'))
-        useQ =  bool(self.getValue('Use imag signal'))
+        useQ = bool(self.getValue('Use imag signal'))
         IlargerThanThreshold = bool(self.getValue('Real signal larger or smaller'))
         QlargerThanThreshold = bool(self.getValue('Imag signal larger or smaller'))
-        heraldTrace = traceIn[::2]
-        selectedTrace = traceIn[1::2]
+
+        heraldTrace = vY[::2]
+        selectedTrace = vY[1::2]
         if quant.name == 'Value':
             # no preselection
             value = selectedTrace
-        elif quant.name == 'Preselected Value':
+        elif quant.name == 'Value - Preselected':
             # preselection here
-            value = []
+            tempt = []
             for idx in range(len(heraldTrace)):
-                if (useI==True and useQ==False):
-                    if IlargerThanThreshold:
-                        if np.real(heraldTrace[idx]) > np.real(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
+                if (useI is True) and (useQ is False) and (IlargerThanThreshold is True):
+                    if np.real(heraldTrace[idx]) > vThresholdReal:
+                        tempt = np.append(tempt, selectedTrace[idx])
                     else:
-                        if (np.real(heraldTrace[idx]) < np.real(vThreshold)):
-                            value = np.append(value, selectedTrace[idx])
-
-                elif (useI == False and useQ == True):
-                    if QlargerThanThreshold:
-                        if np.imag(heraldTrace[idx]) > np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
+                        continue
+                elif (useI is True) and (useQ is False) and (IlargerThanThreshold is False):
+                    if np.real(heraldTrace[idx]) < vThresholdReal:
+                        tempt = np.append(tempt, selectedTrace[idx])
                     else:
-                        if np.imag(heraldTrace[idx]) < np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
-                elif (useI == True and useQ == True):
-                    if IlargerThanThreshold==True and QlargerThanThreshold==True:
-                        if np.real(heraldTrace[idx]) > np.real(vThreshold) and np.imag(heraldTrace[idx]) > np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
-                    elif IlargerThanThreshold == True and QlargerThanThreshold==False:
-                        if np.real(heraldTrace[idx]) > np.real(vThreshold) and np.imag(heraldTrace[idx]) < np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
-                    elif IlargerThanThreshold == False and QlargerThanThreshold == True:
-                        if np.real(heraldTrace[idx]) < np.real(vThreshold) and np.imag(heraldTrace[idx]) > np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
+                        continue
+                elif (useI is False) and (useQ is True) and (QlargerThanThreshold is True):
+                    if np.imag(heraldTrace[idx]) > vThresholdImag:
+                        tempt = np.append(tempt, selectedTrace[idx])
                     else:
-                        if np.real(heraldTrace[idx]) < np.real(vThreshold) and np.imag(heraldTrace[idx]) < np.imag(vThreshold):
-                            value = np.append(value, selectedTrace[idx])
+                        continue
+                elif (useI is False) and (useQ is True) and (QlargerThanThreshold is False):
+                    if np.imag(heraldTrace[idx]) < vThresholdImag:
+                        tempt = np.append(tempt, selectedTrace[idx])
+                    else:
+                        continue
+                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is True) and (
+                        QlargerThanThreshold is True):
+                    if (np.real(heraldTrace[idx]) > vThresholdReal) and (np.imag(heraldTrace[idx]) > vThresholdImag):
+                        tempt = np.append(tempt, selectedTrace[idx])
+                    else:
+                        continue
+                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is True) and (
+                        QlargerThanThreshold is False):
+                    if (np.real(heraldTrace[idx]) > vThresholdReal) and (np.imag(heraldTrace[idx]) < vThresholdImag):
+                        tempt = np.append(tempt, selectedTrace[idx])
+                    else:
+                        continue
+                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is False) and (
+                        QlargerThanThreshold is True):
+                    if (np.real(heraldTrace[idx]) < vThresholdReal) and (np.imag(heraldTrace[idx]) > vThresholdImag):
+                        tempt = np.append(tempt, selectedTrace[idx])
+                    else:
+                        continue
+                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is False) and (
+                        QlargerThanThreshold is False):
+                    if (np.real(heraldTrace[idx]) < vThresholdReal) and (np.imag(heraldTrace[idx]) < vThresholdImag):
+                        tempt = np.append(tempt, selectedTrace[idx])
+                    else:
+                        continue
+                else:
+                    break
+            value = tempt
         else:
             # just return the quantity value
             value = quant.getValue()
