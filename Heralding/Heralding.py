@@ -30,15 +30,12 @@ class Driver(InstrumentDriver.InstrumentWorker):
     def performGetValue(self, quant, options={}):
         """Perform the Get Value instrument operation"""
         traceIn = self.getValue('Input data')
-        vThresholdReal = self.getValue('Threshold voltage - real')
-        vThresholdImag = self.getValue('Threshold voltage - imag')
+        maxI = self.getValue('I_max')
+        minI = self.getValue('I_min')
+        maxQ = self.getValue('Q_max')
+        minQ = self.getValue('Q_min')
         vY = traceIn['y']
         dt = traceIn['dt']
-        useI = bool(self.getValue('Use real signal'))
-        useQ = bool(self.getValue('Use imag signal'))
-        IlargerThanThreshold = bool(self.getValue('Real signal larger or smaller'))
-        QlargerThanThreshold = bool(self.getValue('Imag signal larger or smaller'))
-
         heraldTrace = vY[::2]
         selectedTrace = vY[1::2]
         if quant.name == 'Value':
@@ -48,52 +45,11 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # preselection here
             tempt = []
             for idx in range(len(heraldTrace)):
-                if (useI is True) and (useQ is False) and (IlargerThanThreshold is True):
-                    if np.real(heraldTrace[idx]) > vThresholdReal:
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is True) and (useQ is False) and (IlargerThanThreshold is False):
-                    if np.real(heraldTrace[idx]) < vThresholdReal:
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is False) and (useQ is True) and (QlargerThanThreshold is True):
-                    if np.imag(heraldTrace[idx]) > vThresholdImag:
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is False) and (useQ is True) and (QlargerThanThreshold is False):
-                    if np.imag(heraldTrace[idx]) < vThresholdImag:
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is True) and (
-                        QlargerThanThreshold is True):
-                    if (np.real(heraldTrace[idx]) > vThresholdReal) and (np.imag(heraldTrace[idx]) > vThresholdImag):
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is True) and (
-                        QlargerThanThreshold is False):
-                    if (np.real(heraldTrace[idx]) > vThresholdReal) and (np.imag(heraldTrace[idx]) < vThresholdImag):
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is False) and (
-                        QlargerThanThreshold is True):
-                    if (np.real(heraldTrace[idx]) < vThresholdReal) and (np.imag(heraldTrace[idx]) > vThresholdImag):
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
-                elif (useI is True) and (useQ is True) and (IlargerThanThreshold is False) and (
-                        QlargerThanThreshold is False):
-                    if (np.real(heraldTrace[idx]) < vThresholdReal) and (np.imag(heraldTrace[idx]) < vThresholdImag):
-                        tempt = np.append(tempt, selectedTrace[idx])
-                    else:
-                        continue
+                if (np.real(heraldTrace[idx]) > minI) and (np.real(heraldTrace[idx]) < maxI)\
+                        and (np.imag(heraldTrace[idx]) > minQ) and (np.imag(heraldTrace[idx]) < maxQ):
+                    tempt = np.append(tempt, selectedTrace[idx])
                 else:
-                    break
+                    continue
             value = tempt
         else:
             # just return the quantity value
