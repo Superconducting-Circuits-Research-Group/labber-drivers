@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../AlazarTech_SignalDemodulator/.idea/AlazarTech_SignalDemodulator.iml" filepath="$PROJECT_DIR$/../AlazarTech_SignalDemodulator/.idea/AlazarTech_SignalDemodulator.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/Heralding.iml" filepath="$PROJECT_DIR$/.idea/Heralding.iml" />
     </modules>
   </component>
