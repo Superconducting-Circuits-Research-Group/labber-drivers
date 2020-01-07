@@ -216,14 +216,14 @@ class Sequence:
 
         """
         self.sequence_list = []
-		
+        
         if self.perform_heralding:
             self.add_gate_to_all(gates.ReadoutGate(), dt=0, align='left')
-			
+            
         if self.heralding_delay > 0:
             delay_heralding = gates.IdentityGate(width=self.heralding_delay)
             self.add_gate_to_all(delay_heralding, dt=0)
-			
+            
         if self.perform_process_tomography:
             self._process_tomography.add_pulses(self)
 
@@ -459,12 +459,17 @@ class Sequence:
 
         #Heralding
         self.heralding_delay = config.get('Delay after heralding')
-
+            
         # perform heralding
         self.perform_heralding = \
             config.get('Activate Heralding', False)
 
-
+        # merge channels
+        self.perform_merging = \
+            config.get('Merge channels', False)
+        self.tool_channel = config.get('Tool channel')
+        self.target_channel = config.get('Target channel')
+        
         # process tomography prepulses
         self.perform_process_tomography = \
             config.get('Generate process tomography prepulse', False)
@@ -658,7 +663,15 @@ class SequenceToWaveforms:
         waveforms['gate'] = self._wave_gate
         waveforms['readout_trig'] = self.readout_trig
         waveforms['readout_iq'] = self.readout_iq
-
+        if self.perform_merging:
+            if self.tool_channel == 'readout':
+                tool_waveform = waveforms['readout_iq']
+            elif self.tool_channel.startswith('qubit'):
+                tool_waveform = waveforms['xy'][int(self.tool_channel[-1]) - 1]
+            if self.target_channel == 'readout':
+                waveforms['readout_iq'] += tool_waveform
+            elif self.target_channel.startswith('qubit'):
+                waveforms['xy'][int(self.target_channel[-1]) - 1] += tool_waveform
         # log.info('returning z waveforms in get_waveforms. Max is {}'.format(np.max(waveforms['z'])))
         return waveforms
 
@@ -996,7 +1009,7 @@ class SequenceToWaveforms:
             start2 = int(
                 np.min((start + self.second_trig_delay * self.sample_rate,
                         self.n_pts_readout)))
-		
+        
             end2 = int(
                 np.min((start2 + self.readout_trig_duration * self.sample_rate,
                         self.n_pts_readout)))
@@ -1386,10 +1399,16 @@ class SequenceToWaveforms:
         self.readout_trig_amplitude = config.get('Readout trig amplitude')
         self.readout_trig_duration = config.get('Readout trig duration')
         self.perform_duplicate_trigger = config.get('Duplicate trigger')
-        self.second_trig_delay = config.get('Second trigger delay')
+        self.second_trig_delay = config.get('Second trigger delay')        
         self.readout_predistort = config.get('Predistort readout waveform')
         self.readout.set_parameters(config)
 
+        # merge channels
+        self.perform_merging = \
+            config.get('Merge channels', False)
+        self.tool_channel = config.get('Tool channel')
+        self.target_channel = config.get('Target channel')
+        
         # get readout pulse parameters
         phases = 2 * np.pi * np.array([
             0.8847060, 0.2043214, 0.9426104, 0.6947334, 0.8752361, 0.2246747,
