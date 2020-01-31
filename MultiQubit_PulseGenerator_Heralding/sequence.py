@@ -668,10 +668,12 @@ class SequenceToWaveforms:
                 tool_waveform = waveforms['readout_iq']
             elif self.tool_channel.startswith('qubit'):
                 tool_waveform = waveforms['xy'][int(self.tool_channel[-1]) - 1]
+                tool_waveform_gate = waveforms['gate'][int(self.tool_channel[-1]) - 1]
             if self.target_channel == 'readout':
                 waveforms['readout_iq'] += tool_waveform
             elif self.target_channel.startswith('qubit'):
                 waveforms['xy'][int(self.target_channel[-1]) - 1] += tool_waveform
+                waveforms['gate'][int(self.target_channel[-1]) - 1] = np.logical_or(waveforms['gate'][int(self.target_channel[-1]) - 1], tool_waveform_gate)
         # log.info('returning z waveforms in get_waveforms. Max is {}'.format(np.max(waveforms['z'])))
         return waveforms
 
