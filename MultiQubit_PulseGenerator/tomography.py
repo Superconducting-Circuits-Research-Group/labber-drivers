@@ -30,8 +30,12 @@ class ProcessTomography(object):
 
         # determine which tomography scheme is in use
         self.tomography_scheme = config.get('Tomography scheme')
-        self.nProcessTomoQubits = 1 if self.tomography_scheme \
-            == 'Single qubit' else 2
+        
+        
+        if self.tomography_scheme in ['Single qubit', 'AllXY']:
+            self.nProcessTomoQubits = 1
+        else:
+            self.nProcessTomoQubits = 2
 
         # Prep dictionary to translate string 'one' into int(1) etc.:
         dnQubitsTranslate = {
@@ -69,7 +73,8 @@ class ProcessTomography(object):
             Sequence to which to add the prepulses
 
         """
-        if self.tomography_scheme == 'Single qubit':
+        
+        if self.tomography_scheme in ['Single qubit', 'AllXY']:
             qubitID1 = self.qubit1ID - 1
             gate = None
 
@@ -101,7 +106,7 @@ class ProcessTomography(object):
             indicating which state to prepare
         """
 
-        if self.tomography_scheme == 'Single qubit':
+        if self.tomography_scheme in ['Single qubit', 'AllXY']:
             indices = list(whichGate)
             gate = None
             for index in indices:
@@ -177,6 +182,11 @@ class StateTomography(object):
             self.singleQBtomoID = dnQubitsTranslate[config.get(
                 'Qubit for tomography')]
             self.tomography_index = config.get('Tomography pulse index 1-QB')
+
+        elif self.tomography_scheme == 'AllXY':
+            self.singleQBtomoID = dnQubitsTranslate[config.get(
+                'Qubit for tomography')]
+            self.tomography_index = config.get('AllXY pulse index (21 pulse set)')
 
         elif self.tomography_scheme in ['Two qubit (9 pulse set)',
                                         'Two qubit (30 pulse set)',
@@ -385,7 +395,78 @@ class StateTomography(object):
             elif self.tomography_index == 'Y2m-Y2m':
                 gate = [gates.Y2m, gates.Y2m]
             sequence.add_gate([qubitID1, qubitID2], gate)
+            
+        elif self.tomography_scheme == 'AllXY':
+            qubitID = self.singleQBtomoID - 1
+            gate1 = [None]
+            gate2 = [None]
 
+            if self.tomography_index == 'I-I':
+                gate1 = gates.I
+                gate2 = gates.I
+            elif self.tomography_index == 'Xp-Xp':
+                gate1 = gates.Xp
+                gate2 = gates.Xp
+            elif self.tomography_index == 'Yp-Yp':
+                gate1 = gates.Yp
+                gate2 = gates.Yp
+            elif self.tomography_index == 'Xp-Yp':
+                gate1 = gates.Xp
+                gate2 = gates.Yp
+            elif self.tomography_index == 'Yp-Xp':
+                gate1 = gates.Xp
+                gate2 = gates.Yp
+            elif self.tomography_index == 'X2p-I':
+                gate1 = gates.X2p
+                gate2 = gates.I
+            elif self.tomography_index == 'Y2p-I':
+                gate1 = gates.Y2p
+                gate2 = gates.I
+            elif self.tomography_index == 'X2p-Y2p':
+                gate1 = gates.X2p
+                gate2 = gates.Y2p
+            elif self.tomography_index == 'Y2p-X2p':
+                gate1 = gates.Y2p
+                gate2 = gates.X2p
+            elif self.tomography_index == 'X2p-Yp':
+                gate1 = gates.X2p
+                gate2 = gates.Yp
+            elif self.tomography_index == 'Y2p-Xp':
+                gate1 = gates.Y2p
+                gate2 = gates.Xp
+            elif self.tomography_index == 'Xp-Y2p':
+                gate1 = gates.Xp
+                gate2 = gates.Y2p
+            elif self.tomography_index == 'Yp-X2p':
+                gate1 = gates.Yp
+                gate2 = gates.X2p
+            elif self.tomography_index == 'X2p-Xp':
+                gate1 = gates.X2p
+                gate2 = gates.Xp
+            elif self.tomography_index == 'Xp-X2p':
+                gate1 = gates.Xp
+                gate2 = gates.X2p
+            elif self.tomography_index == 'Y2p-Yp':
+                gate1 = gates.Y2p
+                gate2 = gates.Yp
+            elif self.tomography_index == 'Yp-Y2p':
+                gate1 = gates.Yp
+                gate2 = gates.Y2p
+            elif self.tomography_index == 'Xp-I':
+                gate1 = gates.Xp
+                gate2 = gates.I
+            elif self.tomography_index == 'Yp-I':
+                gate1 = gates.Yp
+                gate2 = gates.I
+            elif self.tomography_index == 'X2p-X2p':
+                gate1 = gates.X2p
+                gate2 = gates.X2p
+            elif self.tomography_index == 'Y2p-Y2p':
+                gate1 = gates.Y2p
+                gate2 = gates.Y2p
+                
+            sequence.add_gate(qubitID, gate1)
+            sequence.add_gate(qubitID, gate2)
 
 if __name__ == '__main__':
     pass

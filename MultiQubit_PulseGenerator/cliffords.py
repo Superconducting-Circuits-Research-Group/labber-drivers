@@ -134,9 +134,16 @@ def Gate_to_strGate(_Gate):
         str_Gate = 'Z2m'
     elif (_Gate == gates.CZ):
         str_Gate = 'CZ'
+    elif (_Gate == gates.VZp):
+        str_Gate = 'VZp'
+    elif (_Gate == gates.VZ2p):
+        str_Gate = 'VZ2p'
+    elif (_Gate == gates.VZm):
+        str_Gate = 'VZm'
+    elif (_Gate == gates.VZ2m):
+        str_Gate = 'VZ2m'
 
     return str_Gate
-
 
 def strGate_to_Gate(_strGate):
     """

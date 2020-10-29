@@ -1,0 +1,11 @@
+New Sequence
+Index: 0, Gate: [X2m, X2p]
+Index: 1, Gate: [Y2m, Y2m]
+Index: 2, Gate: [X2p, I]
+Index: 3, Gate: [I, Y2m]
+Index: 4, Gate: [I, X2m]
+CliffordIndex: 0, Gate: [X2m, X2p]
+CliffordIndex: 1, Gate: [Y2m, Y2m]
+CliffordIndex: 2, Gate: [X2p, I]
+RecoveryIndex: 0, Gate: [I, Y2m]
+RecoveryIndex: 1, Gate: [I, X2m]

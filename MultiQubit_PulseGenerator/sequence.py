@@ -17,7 +17,7 @@ log = logging.getLogger('LabberDriver')
 # TODO Reduce calc of CZ by finding all unique TwoQubitGates in seq and calc.
 # TODO Make I(width=None) have the width of the longest gate in the step
 # TODO Add checks so that not both t0 and dt are given
-# TODO Two composite gates should be able to be parallell
+# TODO Two composite gates should be able to be parallel
 # TODO check number of qubits in seq and in gate added to seq
 # TODO Remove pulse from I gates
 
@@ -170,13 +170,16 @@ class Sequence:
 
     def __init__(self, n_qubit):
         self.n_qubit = n_qubit
-
+                
         # log.info('initiating empty seqence list')
         self.sequence_list = []
 
         # perform Heralding
         self.perform_heralding = False
         self.heralding_delay = 0.0
+        
+        self.perform_heralding_2 = False
+        self.heralding_delay_2 = 0.0
 
         # process tomography
         self.perform_process_tomography = False
@@ -216,14 +219,14 @@ class Sequence:
 
         """
         self.sequence_list = []
-        
+		
         if self.perform_heralding:
-            self.add_gate_to_all(gates.ReadoutGate(), dt=0, align='left')
+            self.add_gate_to_all(gates.HeraldingGate(), dt=0, align='right')			
             
         if self.heralding_delay > 0:
             delay_heralding = gates.IdentityGate(width=self.heralding_delay)
-            self.add_gate_to_all(delay_heralding, dt=0)
-            
+            self.add_gate_to_all(delay_heralding, dt=0, align='right')
+			
         if self.perform_process_tomography:
             self._process_tomography.add_pulses(self)
 
@@ -231,7 +234,13 @@ class Sequence:
 
         if self.perform_state_tomography:
             self._state_tomography.add_pulses(self)
-
+            
+        if self.perform_heralding_2:
+            self.add_gate_to_all(gates.HeraldingGate2(), dt=0, align='left')	
+            if self.heralding_delay_2 > 0:
+                delay_heralding_2 = gates.IdentityGate(width=self.heralding_delay_2)
+                self.add_gate_to_all(delay_heralding_2, dt=0)
+                
         if self.readout_delay > 0:
             delay = gates.IdentityGate(width=self.readout_delay)
             self.add_gate_to_all(delay, dt=0)
@@ -459,17 +468,14 @@ class Sequence:
 
         #Heralding
         self.heralding_delay = config.get('Delay after heralding')
-            
+        self.heralding_delay_2 = config.get('Delay after heralding #2')
+
         # perform heralding
         self.perform_heralding = \
             config.get('Activate Heralding', False)
+        self.perform_heralding_2 = \
+            config.get('Activate Heralding #2', False)
 
-        # merge channels
-        self.perform_merging = \
-            config.get('Merge channels', False)
-        self.tool_channel = config.get('Tool channel')
-        self.target_channel = config.get('Target channel')
-        
         # process tomography prepulses
         self.perform_process_tomography = \
             config.get('Generate process tomography prepulse', False)
@@ -524,6 +530,7 @@ class SequenceToWaveforms:
         self.n_qubit = n_qubit
         self.dt = 10E-9
         self.local_xy = True
+        self.single_qubit_pulse_scaling = 'Amplitude'
         self.simultaneous_pulses = True
 
         # waveform parameter
@@ -543,6 +550,7 @@ class SequenceToWaveforms:
         # log.info('_wave_z initiated to 0s')
         self._wave_z = [np.zeros(0) for n in range(self.n_qubit)]
         self._wave_gate = [np.zeros(0) for n in range(self.n_qubit)]
+        self._wave_gate_z = [np.zeros(0) for n in range(self.n_qubit)]
 
         # waveform delays
         self.wave_xy_delays = np.zeros(self.n_qubit)
@@ -553,6 +561,8 @@ class SequenceToWaveforms:
         self.pulses_1qb_z = [None for n in range(self.n_qubit)]
         self.pulses_2qb = [None for n in range(self.n_qubit - 1)]
         self.pulses_readout = [None for n in range(self.n_qubit)]
+        self.pulses_heralding = [None for n in range(self.n_qubit)]
+        self.pulses_heralding_2 = [None for n in range(self.n_qubit)]
 
         # cross-talk
         self.compensate_crosstalk = False
@@ -581,11 +591,17 @@ class SequenceToWaveforms:
 
         # readout trig settings
         self.readout_trig_generate = False
+        self.heralding_trig_generate = False
+        self.heralding_trig_generate_2 = False
 
         # readout wave object and settings
         self.readout = readout.Demodulation(self.n_qubit)
         self.readout_trig = np.array([], dtype=float)
+        self.heralding_trig = np.array([], dtype=float)
+        self.heralding_trig_2 = np.array([], dtype=float)
         self.readout_iq = np.array([], dtype=np.complex)
+        self.heralding_iq = np.array([], dtype=np.complex)
+        self.heralding_iq_2 = np.array([], dtype=np.complex)
 
     def get_waveforms(self, sequence):
         """Compile the given sequence into waveforms.
@@ -613,6 +629,9 @@ class SequenceToWaveforms:
         self._explode_composite_gates()
         # log.info('Point 3: Sequence_list[6].gates = {}'.format(self.sequence_list[6].gates))
 
+        if self.compose_singleqb_gate_virtualZ:
+            self._compose_singleqb_gate_virtualZ_()
+
         self._add_pulses_and_durations()
         # log.info('Point 4: Sequence_list[6].gates = {}'.format(self.sequence_list[6].gates))
 
@@ -632,14 +651,27 @@ class SequenceToWaveforms:
         self._perform_virtual_z()
         self._generate_waveforms()
 
-        # collapse all xy pulses to one waveform if no local XY control
+        # collapse all xy pulses to one waveform if no local XY control or assigned them to the specified waveforms
         if not self.local_xy:
-            # sum all waveforms to first one
-            self._wave_xy[0] = np.sum(self._wave_xy[:self.n_qubit], 0)
-            # clear other waveforms
-            for n in range(1, self.n_qubit):
-                self._wave_xy[n][:] = 0.0
-
+            if self.waveform_assignation == 'Multiplexed':
+                # sum all waveforms to first one
+                self._wave_xy[0] = np.sum(self._wave_xy[:self.n_qubit], 0)
+                # clear other waveforms
+                for n in range(1, self.n_qubit):
+                    self._wave_xy[n][:] = 0.0
+            elif self.waveform_assignation == 'Manual':
+            
+                self._wave_xy_temp = [np.zeros(0, dtype=np.complex) for n in range(self.n_qubit)]
+                
+                for n in range(self.n_qubit):
+                
+                    self._wave_xy_temp[n] = np.zeros(self.n_pts, dtype=np.complex)
+                    
+                # reAssign the waveform according to the dictionary
+                for n in range(self.n_qubit):
+                    self._wave_xy_temp[self.QubitWaveformDictionary[n]] = np.sum([self._wave_xy_temp[self.QubitWaveformDictionary[n]],self._wave_xy[n]], 0)
+                    
+                self._wave_xy = self._wave_xy_temp
         # log.info('before predistortion, _wave_z max is {}'.format(np.max(self._wave_z)))
         # if self.compensate_crosstalk:
         #     self._perform_crosstalk_compensation()
@@ -649,31 +681,40 @@ class SequenceToWaveforms:
             self._predistort_z_waveforms()
         if self.readout_trig_generate:
             self._add_readout_trig()
+        if self.heralding_trig_generate:
+            self._add_heralding_trig()
+        if self.heralding_trig_generate_2:
+            self._add_heralding_trig(heralding_number=2)
         if self.generate_gate_switch:
             self._add_microwave_gate()
+            self._add_microwave_gate_z()
         self._filter_output_waveforms()
 
         # Apply offsets
         self.readout_iq += self.readout_i_offset + 1j * self.readout_q_offset
 
+        #log.info('self.readout_iq.shape is %s' % str(self.readout_iq.shape))
+        if self.activate_cavity_leakage:
+            t = np.linspace(0, (self.n_pts - 1) / self.sample_rate, self.n_pts)
+            y = self.leakage_amplitude
+            phase = self.leakage_phase
+            # single-sideband mixing, get frequency
+            omega = 2 * np.pi * self.leakage_frequency
+            # apply SSBM transform
+            data_i = (y.real * np.cos(omega * t - phase) +
+                      -y.imag * np.cos(omega * t - phase + +np.pi / 2))
+            data_q = (y.real * np.sin(omega * t - phase) +
+                      -y.imag * np.sin(omega * t - phase + +np.pi / 2))
+            self.readout_iq += data_i + 1j * data_q
         # create and return dictionary with waveforms
         waveforms = dict()
         waveforms['xy'] = self._wave_xy
         waveforms['z'] = self._wave_z
         waveforms['gate'] = self._wave_gate
-        waveforms['readout_trig'] = self.readout_trig
-        waveforms['readout_iq'] = self.readout_iq
-        if self.perform_merging:
-            if self.tool_channel == 'readout':
-                tool_waveform = waveforms['readout_iq']
-            elif self.tool_channel.startswith('qubit'):
-                tool_waveform = waveforms['xy'][int(self.tool_channel[-1]) - 1]
-                tool_waveform_gate = waveforms['gate'][int(self.tool_channel[-1]) - 1]
-            if self.target_channel == 'readout':
-                waveforms['readout_iq'] += tool_waveform
-            elif self.target_channel.startswith('qubit'):
-                waveforms['xy'][int(self.target_channel[-1]) - 1] += tool_waveform
-                waveforms['gate'][int(self.target_channel[-1]) - 1] = np.logical_or(waveforms['gate'][int(self.target_channel[-1]) - 1], tool_waveform_gate)
+        waveforms['gate_z'] = self._wave_gate_z
+        waveforms['readout_trig'] = np.sum([self.readout_trig, self.heralding_trig, self.heralding_trig_2],0)
+        waveforms['readout_iq'] = np.sum([self.readout_iq, self.heralding_iq, self.heralding_iq_2], 0)
+        
         # log.info('returning z waveforms in get_waveforms. Max is {}'.format(np.max(waveforms['z'])))
         return waveforms
 
@@ -681,7 +722,7 @@ class SequenceToWaveforms:
         new_sequences = []
         for step in self.sequence_list:
             if any(
-                    isinstance(gate, (gates.ReadoutGate, gates.IdentityGate))
+                    isinstance(gate, (gates.ReadoutGate, gates.HeraldingGate, gates.HeraldingGate2, gates.IdentityGate))
                     for gate in step.gates):
                 # Don't seperate I gates or readouts since we do
                 # multiplexed readout
@@ -724,7 +765,7 @@ class SequenceToWaveforms:
                                 self.sequence_list[0].t_start)
         for step in self.sequence_list:
             step.time_shift(time_diff)
-
+        
     def _add_pulses_and_durations(self):
         for step in self.sequence_list:
             for gate in step.gates:
@@ -743,15 +784,26 @@ class SequenceToWaveforms:
             pulse = None
         # Get the corresponding pulse for other gates
         elif isinstance(gate, gates.SingleQubitXYRotation):
-            pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit])
+            pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit], \
+                pulse_scaling = self.single_qubit_pulse_scaling, \
+                scaling_factor_pi2 = self.single_qubit_pulse_scaling_factor[qubit])
         elif isinstance(gate, gates.SingleQubitZRotation):
-            pulse = gate.get_adjusted_pulse(self.pulses_1qb_z[qubit])
+            pulse = gate.get_adjusted_pulse(self.pulses_1qb_z[qubit], \
+                pulse_scaling = self.single_qubit_pulse_scaling, \
+                scaling_factor_pi2 = 0.5)
         elif isinstance(gate, gates.IdentityGate):
-            pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit])
+            if gate.width==None:
+                pulse = None
+            else:
+                pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit])
         elif isinstance(gate, gates.TwoQubitGate):
             pulse = gate.get_adjusted_pulse(self.pulses_2qb[qubit[0]])
         elif isinstance(gate, gates.ReadoutGate):
             pulse = gate.get_adjusted_pulse(self.pulses_readout[qubit])
+        elif isinstance(gate, gates.HeraldingGate):
+            pulse = gate.get_adjusted_pulse(self.pulses_heralding[qubit])
+        elif isinstance(gate, gates.HeraldingGate2):
+            pulse = gate.get_adjusted_pulse(self.pulses_heralding_2[qubit])
         elif isinstance(gate, gates.CustomGate):
             pulse = gate.get_adjusted_pulse(gate.pulse)
         else:
@@ -762,7 +814,8 @@ class SequenceToWaveforms:
     def _predistort_xy_waveforms(self):
         """Pre-distort the waveforms."""
         # go through and predistort all xy waveforms
-        n_wave = self.n_qubit if self.local_xy else 1
+
+        n_wave = self.n_qubit if not(self.waveform == 'Multiplexed') else 1
         for n in range(n_wave):
             self._wave_xy[n] = self._predistortions[n].predistort(
                 self._wave_xy[n])
@@ -777,6 +830,26 @@ class SequenceToWaveforms:
         """Compensate for Z-control crosstalk."""
         self._wave_z = self._crosstalk.compensate(self._wave_z)
 
+    def _compose_singleqb_gate_virtualZ_(self):
+        n = 0
+        while n < len(self.sequence_list):
+            step = self.sequence_list[n]
+            #log.info(step)
+            new_gate = []
+            new_qubit = []
+            for gate in step.gates:
+                if isinstance(gate.gate, gates.SingleQubitXYRotation):
+                    qubit_for_z_rotation, VZ_pi2, VZ_pi = self.compose_VirtualZ_dictionary[gate.qubit]
+                    if abs(gate.gate.theta)==np.pi:
+                        new_qubit.append(qubit_for_z_rotation-1)
+                        new_gate.append(VZ_pi)
+                    elif abs(gate.gate.theta)==np.pi/2:
+                        new_qubit.append(qubit_for_z_rotation-1)
+                        new_gate.append(VZ_pi2)
+            for i in range(len(new_gate)):
+                self.sequence.add_gate(new_qubit[i], new_gate[i], index = n + i)
+            n += 1
+            
     def _explode_composite_gates(self):
         # Loop through the sequence until all CompositeGates are removed
         # Note that there could be nested CompositeGates
@@ -844,18 +917,18 @@ class SequenceToWaveforms:
                     if qubit == gate.qubit:  # TODO Allow for 2 qb
                         gate_obj = gate.gate
                     if isinstance(gate_obj, gates.VirtualZGate):
-                        phase += gate_obj.theta
+                        phase -= gate_obj.theta
                         continue
                     if (isinstance(gate_obj, gates.SingleQubitXYRotation)
                             and phase != 0):
                         gate.gate = copy.copy(gate_obj)
                         gate.gate.phi += phase
-                        # Need to recomput the pulse
+                        # Need to recompute the pulse
                         gate.pulse = self._get_pulse_for_gate(gate)
 
     def _add_microwave_gate(self):
         """Create waveform for gating microwave switch."""
-        n_wave = self.n_qubit if self.local_xy else 1
+        n_wave = self.n_qubit if not(self.waveform_assignation == 'Multiplexed') else 1
         # go through all waveforms
         for n, wave in enumerate(self._wave_xy[:n_wave]):
             if self.uniform_gate:
@@ -906,6 +979,60 @@ class SequenceToWaveforms:
             gate[-1] = 0.0
             # store results
             self._wave_gate[n] = gate
+            
+    def _add_microwave_gate_z(self):
+        """Create waveform for gating microwave switch."""
+        n_wave = self.n_qubit if not(self.waveform_assignation == 'Multiplexed') else 1
+        # go through all waveforms
+        for n, wave in enumerate(self._wave_z[:n_wave]):
+            if self.uniform_gate:
+                # the uniform gate is all ones
+                gate = np.ones_like(wave)
+                # if creating readout trig, turn off gate during readout
+                if self.readout_trig_generate:
+                    gate[-int((self.readout_trig_duration - self.gate_overlap -
+                               self.gate_delay) * self.sample_rate):] = 0.0
+            else:
+                # non-uniform gate, find non-zero elements
+                gate = np.array(np.abs(wave) > 0.0, dtype=float)
+                # fix gate overlap
+                n_overlap = int(np.round(self.gate_overlap * self.sample_rate))
+                diff_gate = np.diff(gate)
+                indx_up = np.nonzero(diff_gate > 0.0)[0]
+                indx_down = np.nonzero(diff_gate < 0.0)[0]
+                # add extra elements to left and right for overlap
+                for indx in indx_up:
+                    gate[max(0, indx - n_overlap):(indx + 1)] = 1.0
+                for indx in indx_down:
+                    gate[indx:(indx + n_overlap + 1)] = 1.0
+
+                # fix gaps in gate shorter than min (look for 1>0)
+                diff_gate = np.diff(gate)
+                indx_up = np.nonzero(diff_gate > 0.0)[0]
+                indx_down = np.nonzero(diff_gate < 0.0)[0]
+                # ignore first transition if starting in zero
+                if gate[0] == 0:
+                    indx_up = indx_up[1:]
+                n_down_up = min(len(indx_down), len(indx_up))
+                len_down = indx_up[:n_down_up] - indx_down[:n_down_up]
+                # find short gaps
+                short_gaps = np.nonzero(
+                    len_down < (self.minimal_gate_time * self.sample_rate))[0]
+                for indx in short_gaps:
+                    gate[indx_down[indx]:(1 + indx_up[indx])] = 1.0
+
+                # shift gate in time
+                n_shift = int(np.round(self.gate_delay * self.sample_rate))
+                if n_shift < 0:
+                    n_shift = abs(n_shift)
+                    gate = np.r_[gate[n_shift:], np.zeros((n_shift, ))]
+                elif n_shift > 0:
+                    gate = np.r_[np.zeros((n_shift, )), gate[:(-n_shift)]]
+            # make sure gate starts/ends in 0
+            gate[0] = 0.0
+            gate[-1] = 0.0
+            # store results
+            self._wave_gate_z[n] = gate
 
     def _filter_output_waveforms(self):
         """Filter output waveforms"""
@@ -916,13 +1043,17 @@ class SequenceToWaveforms:
                 self.gate_filter_size, self.gate_filter,
                 self.gate_filter_kaiser_beta)
             # apply filter to all output waveforms
-            n_wave = self.n_qubit if self.local_xy else 1
+            n_wave = self.n_qubit if not(self.waveform_assignation == 'Multiplexed') else 1
             for n in range(n_wave):
                 self._wave_gate[n] = self._apply_window_filter(
                     self._wave_gate[n], window)
+                self._wave_gate_z[n] = self._apply_window_filter(
+                    self._wave_gate_z[n], window)
                 # make sure gate starts/ends in 0
                 self._wave_gate[n][0] = 0.0
                 self._wave_gate[n][-1] = 0.0
+                self._wave_gate_z[n][0] = 0.0
+                self._wave_gate_z[n][-1] = 0.0
 
         # same for z waveforms
         if self.use_z_filter and self.z_filter_size > 1:
@@ -1000,27 +1131,41 @@ class SequenceToWaveforms:
     def _add_readout_trig(self):
         """Create waveform for readout trigger."""
         trig = np.zeros_like(self.readout_iq)
-        start = (np.abs(self.readout_iq) > 0.0).nonzero()[0][0]
+        
+        start = int(np.min(((np.abs(self.readout_iq) > 0.0).nonzero()[0][0] + self.readout_trig_delay * self.sample_rate,self.n_pts_readout)))
         end = int(
             np.min((start + self.readout_trig_duration * self.sample_rate,
                     self.n_pts_readout)))
         trig[start:end] = self.readout_trig_amplitude
 
-        #send two triggers if the duplicate trigger option is activated
-        if self.perform_duplicate_trigger:
-            start2 = int(
-                np.min((start + self.second_trig_delay * self.sample_rate,
-                        self.n_pts_readout)))
-        
-            end2 = int(
-                np.min((start2 + self.readout_trig_duration * self.sample_rate,
-                        self.n_pts_readout)))
-            trig[start2:end2] = self.readout_trig_amplitude
-
         # make sure trig starts and ends in 0.
         trig[0] = 0.0
         trig[-1] = 0.0
         self.readout_trig = trig
+
+    def _add_heralding_trig(self, heralding_number=1):
+        """Create waveform for readout trigger."""
+        trig = np.zeros_like(self.readout_iq)
+        
+        if heralding_number == 2:
+            iq = self.heralding_iq_2
+            delay = self.heralding_trig_delay_2
+        else:
+            iq = self.heralding_iq
+            delay = self.heralding_trig_delay
+        start = int(np.min(((np.abs(iq) > 0.0).nonzero()[0][0] + delay * self.sample_rate,self.n_pts_readout)))
+        end = int(
+            np.min((start + self.readout_trig_duration * self.sample_rate,
+                    self.n_pts_readout)))
+        trig[start:end] = self.readout_trig_amplitude
+
+        # make sure trig starts and ends in 0.
+        trig[0] = 0.0
+        trig[-1] = 0.0
+        if heralding_number == 2:
+            self.heralding_trig_2 = trig
+        else:
+            self.heralding_trig = trig
 
     def _init_waveforms(self):
         """Initialize waveforms according to sequence settings."""
@@ -1053,8 +1198,9 @@ class SequenceToWaveforms:
         for n in range(self.n_qubit):
             self._wave_xy[n] = np.zeros(self.n_pts, dtype=np.complex)
             # log.info('wave z {} initiated to 0'.format(n))
-            self._wave_z[n] = np.zeros(self.n_pts, dtype=float)
+            self._wave_z[n] = np.zeros(self.n_pts, dtype=complex)
             self._wave_gate[n] = np.zeros(self.n_pts, dtype=float)
+            self._wave_gate_z[n] = np.zeros(self.n_pts, dtype=float)
 
         # Waveform time vector
         self.t = np.arange(self.n_pts) / self.sample_rate
@@ -1073,7 +1219,11 @@ class SequenceToWaveforms:
                 self.n_pts_readout += 1
 
         self.readout_trig = np.zeros(self.n_pts_readout, dtype=float)
+        self.heralding_trig = np.zeros(self.n_pts_readout, dtype=float)
+        self.heralding_trig_2 = np.zeros(self.n_pts_readout, dtype=float)
         self.readout_iq = np.zeros(self.n_pts_readout, dtype=np.complex)
+        self.heralding_iq = np.zeros(self.n_pts_readout, dtype=np.complex)
+        self.heralding_iq_2 = np.zeros(self.n_pts_readout, dtype=np.complex)
 
     def _generate_waveforms(self):
         """Generate the waveforms corresponding to the sequence."""
@@ -1085,7 +1235,6 @@ class SequenceToWaveforms:
                 if isinstance(qubit, list):
                     qubit = qubit[0]
                 gate_obj = gate.gate
-
 
                 if isinstance(gate_obj,
                               (gates.IdentityGate, gates.VirtualZGate)):
@@ -1106,8 +1255,23 @@ class SequenceToWaveforms:
                 elif isinstance(gate_obj, gates.SingleQubitXYRotation):
                     waveform = self._wave_xy[qubit]
                     delay = self.wave_xy_delays[qubit]
+                    if self.compensate_classical_xtalk:
+                        qubit2, theta2, phase2 = self.compensate_classical_xtalk_dictionary[qubit]
+                        waveform2 = self._wave_xy[qubit2]
+                        gate2 = copy.copy(gate)
+                        gate2.qubit = qubit2
+                        gate2.pulse = self._get_pulse_for_gate(gate2)
+                        pulse2 = gate2.pulse
+                        pulse2.amplitude *= theta2
+                        pulse2.phase += phase2
                 elif isinstance(gate_obj, gates.ReadoutGate):
                     waveform = self.readout_iq
+                    delay = 0
+                elif isinstance(gate_obj, gates.HeraldingGate):
+                    waveform = self.heralding_iq
+                    delay = 0
+                elif isinstance(gate_obj, gates.HeraldingGate2):
+                    waveform = self.heralding_iq_2
                     delay = 0
                 else:
                     raise ValueError(
@@ -1183,6 +1347,8 @@ class SequenceToWaveforms:
                     elif step.align == 'right':
                         t0 = middle + (max_duration - gate.duration) / 2
                     waveform[indices] += gate.pulse.calculate_waveform(t0, t)
+                    if self.compensate_classical_xtalk and isinstance(gate_obj, gates.SingleQubitXYRotation):
+                        waveform2[indices] += pulse2.calculate_waveform(t0, t)
 
     def set_parameters(self, config={}):
         """Set base parameters using config from from Labber driver.
@@ -1210,8 +1376,32 @@ class SequenceToWaveforms:
         if self.n_qubit != d[config.get('Number of qubits')]:
             self.__init__(d[config.get('Number of qubits')])
 
+        self.single_qubit_pulse_scaling = config.get('Single qubit pulse scaling')
+        if config.get('Non trivial pulse scaling'):
+            self.single_qubit_pulse_scaling_factor = []
+            for n in range(self.n_qubit):
+                m = n + 1
+                self.single_qubit_pulse_scaling_factor.append(config.get('pi/2 scaling #%d' % m))
+        else:
+            self.single_qubit_pulse_scaling_factor = [0.5 for _ in range(d[config.get('Number of qubits')])]
         self.dt = config.get('Pulse spacing')
-        self.local_xy = config.get('Local XY control')
+        
+        #Get the Waveform assignation
+        self.waveform_assignation = config.get('Waveform assignation')
+        
+        #Define the Local XY boolean if the Waveform assignation is Local XY
+        if self.waveform_assignation == 'Local XY':
+            self.local_xy = True
+        elif self.waveform_assignation == 'Manual':
+            self.local_xy = False
+            self.QubitWaveformDictionary = dict()
+            #Dictionary with the associated waveforms
+            for n in range(self.n_qubit):
+                m = n + 1
+                self.QubitWaveformDictionary[n] = int(config.get('Qubit %d waveform' % m))-1
+        else:
+            self.local_xy = False
+            
         # default for simultaneous pulses is true, only option for benchmarking
         self.simultaneous_pulses = config.get('Simultaneous pulses', True)
 
@@ -1222,6 +1412,27 @@ class SequenceToWaveforms:
         self.trim_to_sequence = config.get('Trim waveform to sequence')
         self.trim_start = config.get('Trim both start and end')
         self.align_to_end = config.get('Align pulses to end of waveform')
+
+        # Compose gates
+        self.compensate_classical_xtalk = config.get('Compensate Classical xtalks')
+        self.compose_singleqb_gate_virtualZ = config.get('Compensate Stark Shift with Virtual Z')
+        self.compose_VirtualZ_dictionary = dict()
+        self.compensate_classical_xtalk_dictionary = dict()
+        if self.compose_singleqb_gate_virtualZ:
+            for n in range(self.n_qubit):
+                m = n + 1
+                self.compose_VirtualZ_dictionary[n] = \
+                [d[config.get('Z rotated Qubit #{}'.format(m))],
+                gates.VirtualZGate(config.get('Z rotation pi/2 #{}'.format(m))),
+                gates.VirtualZGate(config.get('Z rotation pi #{}'.format(m)))]
+
+        if self.compensate_classical_xtalk:
+            for n in range(self.n_qubit):
+                m = n + 1
+                self.compensate_classical_xtalk_dictionary[n] = \
+                [d[config.get('Classical rotated Qubit #{}'.format(m))]-1,
+                config.get('Leakage amplitude #{}'.format(m)),
+                config.get('Leakage phase #{}'.format(m))]
 
         # qubit spectra
         for n in range(self.n_qubit):
@@ -1294,7 +1505,7 @@ class SequenceToWaveforms:
             s = ' #%d%d' % (n + 1, n + 2)
             # global parameters
             pulse = (getattr(pulses,
-                             config.get('Pulse type, 2QB'))(complex=False))
+                             config.get('Pulse type, 2QB'))(complex=True))
 
             if config.get('Pulse type, 2QB') in ['CZ', 'NetZero']:
                 pulse.F_Terms = d[config.get('Fourier terms, 2QB')]
@@ -1352,6 +1563,11 @@ class SequenceToWaveforms:
                     pulse.plateau = config.get('Plateau, 2QB' + s)
                 # pulse-specific parameters
                 pulse.amplitude = config.get('Amplitude, 2QB' + s)
+                pulse.frequency = config.get('Frequency, 2QB' + s)
+                pulse.use_drag = config.get('Use DRAG, 2QB')
+                pulse.drag_coefficient = config.get('DRAG scaling, 2QB' + s)
+                pulse.drag_detuning = config.get('DRAG frequency detuning, 2QB' + s)
+                
 
             gates.CZ.new_angles(
                 config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'))
@@ -1400,17 +1616,19 @@ class SequenceToWaveforms:
         self.readout_trig_generate = config.get('Generate readout trig')
         self.readout_trig_amplitude = config.get('Readout trig amplitude')
         self.readout_trig_duration = config.get('Readout trig duration')
-        self.perform_duplicate_trigger = config.get('Duplicate trigger')
-        self.second_trig_delay = config.get('Second trigger delay')        
+        self.readout_trig_delay = config.get('Readout trig delay')
+        self.heralding_trig_generate = config.get('Generate heralding trigger')
+        self.heralding_trig_delay = config.get('Heralding trigger delay')
+        self.heralding_trig_generate_2 = config.get('Generate heralding trigger #2')
+        self.heralding_trig_delay_2 = config.get('Heralding trigger delay #2')
         self.readout_predistort = config.get('Predistort readout waveform')
         self.readout.set_parameters(config)
 
-        # merge channels
-        self.perform_merging = \
-            config.get('Merge channels', False)
-        self.tool_channel = config.get('Tool channel')
-        self.target_channel = config.get('Target channel')
-        
+        # cavity leakage
+        self.activate_cavity_leakage = config.get('Activate cavity leakage')
+        self.leakage_amplitude = config.get('Leakage amplitude')
+        self.leakage_frequency = config.get('Leakage frequency')
+        self.leakage_phase = config.get('Leakage phase')
         # get readout pulse parameters
         phases = 2 * np.pi * np.array([
             0.8847060, 0.2043214, 0.9426104, 0.6947334, 0.8752361, 0.2246747,
@@ -1445,7 +1663,68 @@ class SequenceToWaveforms:
 
             pulse.frequency = config.get('Readout frequency #%d' % m)
             self.pulses_readout[n] = pulse
+            
+        #Heralding pulse
+        for n, pulse in enumerate(self.pulses_heralding):
+            # pulses are indexed from 1 in Labber
+            m = n + 1
+            pulse = (getattr(pulses,
+                             config.get('Readout pulse type'))(complex=True))
+            pulse.truncation_range = config.get('Readout truncation range')
+            pulse.start_at_zero = config.get('Readout start at zero')
+            pulse.iq_skew = config.get('Readout IQ skew') * np.pi / 180
+            pulse.iq_ratio = config.get('Readout I/Q ratio')
 
+            if config.get('Distribute readout phases'):
+                pulse.phase = phases[n]
+            else:
+                pulse.phase = 0
+
+            if config.get('Uniform readout pulse shape'):
+                pulse.width = config.get('Readout width')
+                pulse.plateau = config.get('Heralding duration factor')*config.get('Readout duration')
+            else:
+                pulse.width = config.get('Readout width #%d' % m)
+                pulse.plateau = config.get('Heralding duration factor')*config.get('Readout duration #%d' % m)
+
+            if config.get('Uniform readout amplitude') is True:
+                pulse.amplitude = config.get('Heralding amplitude factor')*config.get('Readout amplitude')
+            else:
+                pulse.amplitude = config.get('Heralding amplitude factor')*config.get('Readout amplitude #%d' % (n + 1))
+
+            pulse.frequency = config.get('Readout frequency #%d' % m)
+            self.pulses_heralding[n] = pulse
+        
+        #Heralding pulse 2
+        for n, pulse in enumerate(self.pulses_heralding_2):
+            # pulses are indexed from 1 in Labber
+            m = n + 1
+            pulse = (getattr(pulses,
+                             config.get('Readout pulse type'))(complex=True))
+            pulse.truncation_range = config.get('Readout truncation range')
+            pulse.start_at_zero = config.get('Readout start at zero')
+            pulse.iq_skew = config.get('Readout IQ skew') * np.pi / 180
+            pulse.iq_ratio = config.get('Readout I/Q ratio')
+
+            if config.get('Distribute readout phases'):
+                pulse.phase = phases[n]
+            else:
+                pulse.phase = 0
+
+            if config.get('Uniform readout pulse shape'):
+                pulse.width = config.get('Readout width')
+                pulse.plateau = config.get('Heralding duration factor #2')*config.get('Readout duration')
+            else:
+                pulse.width = config.get('Readout width #%d' % m)
+                pulse.plateau = config.get('Heralding duration factor #2')*config.get('Readout duration #%d' % m)
+
+            if config.get('Uniform readout amplitude') is True:
+                pulse.amplitude = config.get('Heralding amplitude factor #2')*config.get('Readout amplitude')
+            else:
+                pulse.amplitude = config.get('Heralding amplitude factor #2')*config.get('Readout amplitude #%d' % (n + 1))
+
+            pulse.frequency = config.get('Heralding frequency #2')
+            self.pulses_heralding_2[n] = pulse
         # Delays
         self.wave_xy_delays = np.zeros(self.n_qubit)
         self.wave_z_delays = np.zeros(self.n_qubit)

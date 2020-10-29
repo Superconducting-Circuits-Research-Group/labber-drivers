@@ -30,7 +30,7 @@ class Demodulation(object):
         self.use_phase_ref = False
 
         # self.n_records = 1
-
+        
     def set_parameters(self, config={}):
         """Set base parameters using config from from Labber driver.
 

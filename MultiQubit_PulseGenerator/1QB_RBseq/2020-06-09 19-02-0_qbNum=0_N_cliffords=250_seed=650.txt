@@ -1,0 +1,2 @@
+New Sequence
+CliffordIndex: 0, Gate: [X2p]

@@ -1,0 +1,16 @@
+New Sequence
+The matrix of the overall gate sequence:
+[[ 0.5+0.j   0. +0.5j  0.5+0.j   0. +0.5j]
+ [ 0. -0.5j -0.5+0.j   0. -0.5j -0.5+0.j ]
+ [ 0.5+0.j   0. +0.5j -0.5+0.j   0. -0.5j]
+ [ 0. +0.5j  0.5+0.j   0. -0.5j -0.5+0.j ]]
+The probability amplitude of the final state vector:
+[[0.5+0.j  0. -0.5j 0.5+0.j  0. +0.5j]]
+Index: 0, Gate: [VZ2p, VZ2m]
+Index: 1, Gate: [X2p, Y2p]
+Index: 2, Gate: [VZ2p, VZ2m]
+Index: 3, Gate: [I, CZ]
+CliffordIndex: 0, Gate: [VZ2p, VZ2m]
+CliffordIndex: 1, Gate: [X2p, Y2p]
+CliffordIndex: 2, Gate: [VZ2p, VZ2m]
+CliffordIndex: 3, Gate: [I, CZ]

@@ -7,7 +7,7 @@ import copy
 import numpy as np
 
 from BaseDriver import LabberDriver
-from sequence_builtin import CPMG, PulseTrain, Rabi, SpinLocking
+from sequence_builtin import CPMG, PulseTrain, Rabi, SpinLocking, AllXY
 from sequence_rb import SingleQubit_RB, TwoQubit_RB
 from sequence import SequenceToWaveforms
 import logging
@@ -20,6 +20,7 @@ SEQUENCES = {'Rabi': Rabi,
              '1-QB Randomized Benchmarking': SingleQubit_RB,
              '2-QB Randomized Benchmarking': TwoQubit_RB,
              'Spin-locking': SpinLocking,
+             'AllXY': AllXY,
              'Custom': type(None)}
 
 
@@ -197,9 +198,13 @@ class Driver(LabberDriver):
                 else:
                     value = self.waveforms['xy'][n].imag
             elif name == 'Trace - Z':
-                value = self.waveforms['z'][n]
+                value = self.waveforms['z'][n].real
+            elif name == 'Trace - Y':
+                value = self.waveforms['z'][n].imag
             elif name == 'Trace - G':
                 value = self.waveforms['gate'][n]
+            elif name == 'Trace - H':
+                value = self.waveforms['gate_z'][n]
 
         elif quant.name == 'Trace - Readout trig':
             value = self.waveforms['readout_trig']

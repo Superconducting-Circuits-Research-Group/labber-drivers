@@ -50,12 +50,28 @@ class SingleQubitXYRotation(OneQubitGate):
         self.theta = theta
         self.name = name
 
-    def get_adjusted_pulse(self, pulse):
+    def get_adjusted_pulse(self, pulse, pulse_scaling='Amplitude', scaling_factor_pi2=0.5):
         pulse = copy(pulse)
         pulse.phase = self.phi
+        self.pulse_scaling = pulse_scaling
+        if self.pulse_scaling == 'Amplitude':
         # pi pulse correspond to the full amplitude
-        pulse.amplitude *= self.theta / np.pi
+            pulse.amplitude *= self.theta / np.pi
+            if self.theta==np.pi / 2:
+                pulse.amplitude *= 2*scaling_factor_pi2
+        elif self.pulse_scaling == 'Duration':
+            pulse.plateau *= self.theta / np.pi
+            pulse.width *= self.theta / np.pi
+            if self.theta==np.pi / 2:
+                pulse.plateau *= 2 * scaling_factor_pi2
+                pulse.width *= 2 * scaling_factor_pi2
         return pulse
+        
+    def new_scaling(self, new_pulse_scaling):
+        """Update the pulse scaling
+
+        """
+        self.__init__(self.phi, self.theta, self.name, pulse_scaling=new_pulse_scaling)
 
     def __str__(self):
         if self.name is None:
@@ -88,10 +104,16 @@ class SingleQubitZRotation(OneQubitGate):
         self.theta = theta
         self.name = name
 
-    def get_adjusted_pulse(self, pulse):
+    def get_adjusted_pulse(self, pulse, pulse_scaling='Amplitude'):
         pulse = copy(pulse)
+        pulse.phase = self.phi
+        self.pulse_scaling = pulse_scaling
+        if self.pulse_scaling == 'Amplitude':
         # pi pulse correspond to the full amplitude
-        pulse.amplitude *= self.theta / np.pi
+            pulse.amplitude *= self.theta / np.pi
+        elif self.pulse_scaling == 'Duration':
+            pulse.plateau *= self.theta / np.pi
+            pulse.width *= self.theta / np.pi
         return pulse
 
     def __str__(self):
@@ -172,6 +194,8 @@ class ReadoutGate(OneQubitGate):
 class HeraldingGate(OneQubitGate):
     """Heraldings the qubit state."""
 
+class HeraldingGate2(OneQubitGate):
+    """Heraldings the qubit state."""                                  
 
 class CustomGate(BaseGate):
     """A gate using a given :obj:`Pulse`.
@@ -338,6 +362,8 @@ Xp = SingleQubitXYRotation(phi=0, theta=np.pi, name='Xp')
 Xm = SingleQubitXYRotation(phi=0, theta=-np.pi, name='Xm')
 X2p = SingleQubitXYRotation(phi=0, theta=np.pi / 2, name='X2p')
 X2m = SingleQubitXYRotation(phi=0, theta=-np.pi / 2, name='X2m')
+Xp2 = SingleQubitXYRotation(phi=0, theta = 2 * np.pi, name='Xp2')
+Xm2 = SingleQubitXYRotation(phi=0, theta = - 2 * np.pi, name='Xp2')
 
 # Y gates
 Yp = SingleQubitXYRotation(phi=np.pi / 2, theta=np.pi, name='Yp')
@@ -355,7 +381,7 @@ Z2m = SingleQubitZRotation(-np.pi / 2, name='Z2m')
 VZp = VirtualZGate(np.pi, name='VZp')
 VZ2p = VirtualZGate(np.pi / 2, name='VZ2p')
 VZm = VirtualZGate(-np.pi, name='VZm')
-VZ2m = VirtualZGate(np.pi / 2, name='VZ2m')
+VZ2m = VirtualZGate(-np.pi / 2, name='VZ2m')
 
 # two-qubit gates
 CPh = CPHASE()
@@ -372,8 +398,7 @@ H = CompositeGate(n_qubit=1, name='H')
 H.add_gate(VZp)
 H.add_gate(Y2p)
 
-CZ = CPHASE_with_1qb_phases(
-    0, 0)  # Start with 0, 0 as the single qubit phase shifts.
+CZ = CPHASE_with_1qb_phases(0, 0)  # Start with 0, 0 as the single qubit phase shifts.
 
 CNOT = CompositeGate(n_qubit=2, name='CNOT')
 CNOT.add_gate(H, 1)
