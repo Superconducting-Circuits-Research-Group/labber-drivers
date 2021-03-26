@@ -1252,18 +1252,22 @@ class SequenceToWaveforms:
                     if self.compensate_crosstalk:
                         crosstalk = self._crosstalk.compensation_matrix[:,
                                                                         qubit]
+                    
                 elif isinstance(gate_obj, gates.SingleQubitXYRotation):
                     waveform = self._wave_xy[qubit]
                     delay = self.wave_xy_delays[qubit]
                     if self.compensate_classical_xtalk:
-                        qubit2, theta2, phase2 = self.compensate_classical_xtalk_dictionary[qubit]
+                        qubit2, theta2, phase2, frequency2 = self.compensate_classical_xtalk_dictionary[qubit]
                         waveform2 = self._wave_xy[qubit2]
                         gate2 = copy.copy(gate)
                         gate2.qubit = qubit2
                         gate2.pulse = self._get_pulse_for_gate(gate2)
                         pulse2 = gate2.pulse
+                        pulse2.width = self._get_pulse_for_gate(gate).width
+                        pulse2.plateau = self._get_pulse_for_gate(gate).plateau
                         pulse2.amplitude *= theta2
                         pulse2.phase += phase2
+                        pulse2.frequency = frequency2
                 elif isinstance(gate_obj, gates.ReadoutGate):
                     waveform = self.readout_iq
                     delay = 0
@@ -1346,9 +1350,34 @@ class SequenceToWaveforms:
                         t0 = middle - (max_duration - gate.duration) / 2
                     elif step.align == 'right':
                         t0 = middle + (max_duration - gate.duration) / 2
+                    if isinstance(gate_obj, gates.TwoQubitGate):
+                        [phase_offset, phase_shift_frequency] = self.CZ_phase_correction
+                        phase_correction = phase_offset + phase_shift_frequency * t0 * 2 * np.pi
+                        gate.pulse.phase += phase_correction
                     waveform[indices] += gate.pulse.calculate_waveform(t0, t)
                     if self.compensate_classical_xtalk and isinstance(gate_obj, gates.SingleQubitXYRotation):
                         waveform2[indices] += pulse2.calculate_waveform(t0, t)
+                    elif isinstance(gate_obj, gates.TwoQubitGate):
+                        for XY_dict in self.CZ_XY_rotation_list:
+                            qubit2 = XY_dict['index']
+                            amplitude2 = XY_dict['amplitude']
+                            phase2 = XY_dict['phase']
+                            frequency2 = XY_dict['frequency']                            
+                            phase_shift_frequency2 = XY_dict['phase shift frequency']
+                            gate2 = copy.copy(GateOnQubit(gates.Xp, qubit2))
+                            gate2.pulse = self._get_pulse_for_gate(gate2)
+                            pulse2 = gate2.pulse
+                            pulse2.width = self._get_pulse_for_gate(gate).width
+                            pulse2.plateau = self._get_pulse_for_gate(gate).plateau
+                            pulse2.amplitude = amplitude2
+                            pulse2.phase += phase2 + phase_shift_frequency2 * t0 * 2 * np.pi
+                            pulse2.frequency = frequency2
+                            # pulse_list += [pulse2]                            
+                        # for m in range(len(self.CZ_XY_rotation_list)):
+                            # XY_dict = self.CZ_XY_rotation_list[m]
+                            # qubit2 = XY_dict['index']
+                            # pulse2 = pulse_list[m]
+                            self._wave_xy[qubit2][indices] += pulse2.calculate_waveform(t0, t)
 
     def set_parameters(self, config={}):
         """Set base parameters using config from from Labber driver.
@@ -1432,7 +1461,8 @@ class SequenceToWaveforms:
                 self.compensate_classical_xtalk_dictionary[n] = \
                 [d[config.get('Classical rotated Qubit #{}'.format(m))]-1,
                 config.get('Leakage amplitude #{}'.format(m)),
-                config.get('Leakage phase #{}'.format(m))]
+                config.get('Leakage phase #{}'.format(m)),
+                config.get('Leakage frequency #{}'.format(m))]
 
         # qubit spectra
         for n in range(self.n_qubit):
@@ -1571,7 +1601,19 @@ class SequenceToWaveforms:
 
             gates.CZ.new_angles(
                 config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'))
-
+            self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),
+                                        config.get('Phase shift frequency, 2QB #12')]
+            self.CZ_XY_rotation_list = []
+            for m in range(2):
+                XY_dict = {
+                'index': m,
+                'amplitude': config.get('QB{} amplitude 2QB #12'.format(m + 1)),
+                'phase': config.get('QB{} pulse phase 2QB #12'.format(m + 1)),
+                'frequency': config.get('QB{} frequency 2QB #12'.format(m + 1)),
+                'phase shift frequency': config.get('QB{} phase shift frequency 2QB #12'.format(m + 1)),
+                }
+                self.CZ_XY_rotation_list += [XY_dict]
+                
             self.pulses_2qb[n] = pulse
 
         # predistortion
