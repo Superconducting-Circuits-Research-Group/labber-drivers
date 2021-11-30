@@ -1,0 +1,4 @@
+New Sequence
+Index: 0, Gate: [Y2p, Y2p]
+Index: 1, Gate: [I, CZ]
+Index: 2, Gate: [X2p, Y2p]

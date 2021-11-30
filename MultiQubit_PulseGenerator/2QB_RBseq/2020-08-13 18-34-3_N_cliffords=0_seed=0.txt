@@ -1,0 +1,9 @@
+New Sequence
+The matrix of the overall gate sequence:
+[[1 0 0 0]
+ [0 1 0 0]
+ [0 0 1 0]
+ [0 0 0 1]]
+The probability amplitude of the final state vector:
+[[1 0 0 0]]
+Index: 0, Gate: [I, I]
