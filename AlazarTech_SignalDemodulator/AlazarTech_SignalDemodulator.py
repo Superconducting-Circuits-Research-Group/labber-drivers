@@ -12,8 +12,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
         """Perform the operation of opening the instrument connection."""
         # keep track of sampled records
         self.data = {}
-        #self.lTrace = [np.array([]), np.array([])]
-        #self.lSignalNames = ['Channel A - Demodulated values']#extra line for heralding
         self._dt = 1.0
         # open connection
         boardId = int(self.comCfg.address)
@@ -28,7 +26,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
         self.dig.removeBuffersDMA()
         # remove digitizer object
         del self.dig
-   
+
     def performSetValue(self, quant, value, sweepRate=0.0, options={}):
         """Perform the Set Value instrument operation. This function
         should return the actual value set by the instrument.
@@ -64,11 +62,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             # special case for hardware looping
             if self.isHardwareLoop(options):
                 self.getSignalHardwareLoop(quant, options)
-                # cash demodulation parameters
-                if self._mode.startswith('Individual') or \
-                        self._mode.startswith('Referenced Individual'):
-                    self.cashDemodulationParametersForIndividual()
-                self.log('called performGetValue and isHardwareLoop')
                 return self.getData(quant, options)
             
             # check if first call, if so get new records
@@ -86,8 +79,7 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 if self._mode.startswith('Individual') or \
                         self._mode.startswith('Referenced Individual'):
                     self.cashDemodulationParametersForIndividual()
-                    
-            
+
             # return correct data
             return self.getData(quant, options)
         else:
@@ -101,7 +93,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
             (seq_no, n_seq) = self.getHardwareLoopIndex(options)
             self.sendValueToOther('Records per buffer', n_seq)
             nRecords = int(round(self.getValue('Number of records')))
-            self._nReadout = self.getValue('Number of readout pulse in one waveform')
             self._nRecords = n_seq * nRecords
             # disable trig timeout (set to 1 minute)
             self.dig.AlazarSetTriggerTimeOut(self.dComCfg['Timeout'] + 60.0)
@@ -382,9 +373,8 @@ class Driver(InstrumentDriver.InstrumentWorker):
             elif name in ('Channel A - Demodulated values',
                           'Channel B - Demodulated values'):
                 if name not in self.data:
-                    self.getDemodulatedValuesFromIndividual()  
+                    self.getDemodulatedValuesFromIndividual()
                 return quant.getTraceDict(self.data[name], dt=1)
-               
             elif name in ('Channel A - Average demodulated value',
                           'Channel B - Average demodulated value'):
                 if name not in self.data:
@@ -421,18 +411,6 @@ class Driver(InstrumentDriver.InstrumentWorker):
                 flattened = self.data[name[:9]].ravel()
                 return quant.getTraceDict(flattened, dt=self._dt)
             elif name == 'Channel A - Demodulated values':
-                if self.isHardwareLoop(options):
-                    (seq_no, n_seq) = self.getHardwareLoopIndex(options)
-                    nReadout = int(self._nReadout)
-                    if seq_no == 0:
-                        self.getDemodulatedValuesFromIndividual()
-                        self.data_reshape = self.data[name].reshape((int(self._nRecords / n_seq / nReadout), n_seq * nReadout))
-                    self.log('get data!')
-                    self.log(self.data_reshape.shape)
-                    data_for_seq_no = self.data_reshape[:, seq_no:seq_no + nReadout].ravel()
-                    self.log(data_for_seq_no.shape)
-                    return data_for_seq_no
-                
                 if name not in self.data:
                     self.getDemodulatedValuesFromIndividual()
                 return quant.getTraceDict(self.data[name], dt=1)

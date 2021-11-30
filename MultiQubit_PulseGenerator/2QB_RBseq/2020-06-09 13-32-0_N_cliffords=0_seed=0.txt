@@ -1,2 +1,0 @@
-New Sequence
-Index: 0, Gate: [I, I]
