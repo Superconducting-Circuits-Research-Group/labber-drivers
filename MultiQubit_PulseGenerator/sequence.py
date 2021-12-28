@@ -925,6 +925,12 @@ class SequenceToWaveforms:
                         gate.gate.phi += phase
                         # Need to recompute the pulse
                         gate.pulse = self._get_pulse_for_gate(gate)
+                    if (isinstance(gate.gate, gates.TwoQubitGate) # TODO need to double check
+                            and phase != 0):
+                        # gate.gate = copy.copy(gate_obj)
+                        gate.pulse.phase += phase / 2
+                        # Need to recompute the pulse
+                        # gate.pulse = self._get_pulse_for_gate(gate)
 
     def _add_microwave_gate(self):
         """Create waveform for gating microwave switch."""
@@ -1354,7 +1360,21 @@ class SequenceToWaveforms:
                         [phase_offset, phase_shift_frequency] = self.CZ_phase_correction
                         phase_correction = phase_offset + phase_shift_frequency * t0 * 2 * np.pi
                         gate.pulse.phase += phase_correction
-                    waveform[indices] += gate.pulse.calculate_waveform(t0, t)
+                        if self.CZ_leakage_control[0]:
+                            waveform[indices] += gate.pulse.calculate_waveform(t0, t)
+                        else:
+                            gate_duration = gate.duration
+                            leakage_duration = gate_duration - gate.pulse.plateau + self.CZ_leakage_control[1]
+                            gate.pulse.plateau -= leakage_duration
+                            new_indices = np.arange(
+                                max(np.floor((t0 - gate_duration / 2) * self.sample_rate), 0),
+                                min(np.ceil((t0 + gate_duration / 2 - leakage_duration) * self.sample_rate), len(waveform)),
+                                dtype=int)
+                            new_t = new_indices / self.sample_rate
+                            new_t0 = t0 - leakage_duration / 2
+                            waveform[new_indices] += gate.pulse.calculate_waveform(new_t0, new_t)
+                    else:
+                        waveform[indices] += gate.pulse.calculate_waveform(t0, t)
                     if self.compensate_classical_xtalk and isinstance(gate_obj, gates.SingleQubitXYRotation):
                         waveform2[indices] += pulse2.calculate_waveform(t0, t)
                     elif isinstance(gate_obj, gates.TwoQubitGate):
@@ -1368,16 +1388,21 @@ class SequenceToWaveforms:
                             gate2.pulse = self._get_pulse_for_gate(gate2)
                             pulse2 = gate2.pulse
                             pulse2.width = self._get_pulse_for_gate(gate).width
-                            pulse2.plateau = self._get_pulse_for_gate(gate).plateau
+                            pulse2.plateau = self.CZ_leakage_control[1]
                             pulse2.amplitude = amplitude2
                             pulse2.phase += phase2 + phase_shift_frequency2 * t0 * 2 * np.pi
                             pulse2.frequency = frequency2
-                            # pulse_list += [pulse2]                            
-                        # for m in range(len(self.CZ_XY_rotation_list)):
-                            # XY_dict = self.CZ_XY_rotation_list[m]
-                            # qubit2 = XY_dict['index']
-                            # pulse2 = pulse_list[m]
-                            self._wave_xy[qubit2][indices] += pulse2.calculate_waveform(t0, t)
+                            if self.CZ_leakage_control[0]:
+                                self._wave_xy[qubit2][indices] += pulse2.calculate_waveform(t0, t)
+                            else:
+                                new_indices = np.arange(
+                                    max(np.floor((t0 + gate_duration / 2 - leakage_duration) * self.sample_rate), 0),
+                                    min(np.ceil((t0 + gate_duration / 2) * self.sample_rate), len(waveform)),
+                                    dtype=int)
+                                new_t = new_indices / self.sample_rate
+                                new_t0 = t0 + gate_duration / 2 - leakage_duration / 2
+                                self._wave_xy[qubit2][new_indices] += pulse2.calculate_waveform(new_t0, new_t)
+                            
 
     def set_parameters(self, config={}):
         """Set base parameters using config from from Labber driver.
@@ -1603,6 +1628,8 @@ class SequenceToWaveforms:
                 config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'))
             self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),
                                         config.get('Phase shift frequency, 2QB #12')]
+            self.CZ_leakage_control = [config.get('Simultaneous leakage #12'),
+                                        config.get('Leakage plateau #12')]
             self.CZ_XY_rotation_list = []
             for m in range(2):
                 XY_dict = {

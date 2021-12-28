@@ -1310,14 +1310,17 @@ class TwoQubit_RB(Sequence):
                 gate_2 = np.matmul(
                     np.matrix([[1+1j, 0], [0, 1-1j]]) / np.sqrt(2), gate_2)
 
-            gate_12 = np.kron(gate_1, gate_2)
+            gate_12 = np.kron(gate_1, gate_2)   
             
-            matrix_cz = np.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0],
-                               [0, 0, 0, np.exp(self.controlled_phase * 1j)]])
+            # change 2QB gate here
+            matrix_cz = np.matrix([[0, 0, 0, -1j], [0, 1, 0, 0], [0, 0, 1, 0],
+                               [-1j, 0, 0, 0]])
+            # matrix_cz = np.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0],
+                               # [0, 0, 0, np.exp(self.controlled_phase * 1j)]])
             
             if (gate_seq_1[i] == gates.CZ or gate_seq_2[i] == gates.CZ):
                 gate_12 = np.matmul(matrix_cz, gate_12)
-            # iSWAP <- To be added.
+            # iSWAP <- To be added. 
             # elif (gate_seq_1[i] == gates.iSWAP or gate_seq_2[i] == gates.iSWAP):
             #     gate_12 = np.matmul(
             #         np.matrix([[1, 0, 0, 0], [0, 0, 1j, 0], [0, 1j, 0, 0],
