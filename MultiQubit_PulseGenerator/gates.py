@@ -185,8 +185,25 @@ class VirtualZGate(OneQubitGate):
 
 
 class CPHASE(TwoQubitGate):
-    """ CPHASE gate. """
-
+    """ CPHASE gate. 
+    
+    Parameters
+    ----------
+    phi : float
+        Rotation axis.
+    VZ_factor : float
+        Roation axis factor.
+        
+    """
+    def __init__(self, phi, VZ_factor=0.5):
+        self.phi = phi
+        self.VZ_factor = VZ_factor
+        
+    def get_adjusted_pulse(self, pulse):
+        # log.info('self.phi is ' + str(self.phi))
+        pulse = copy(pulse)
+        pulse.phase = self.phi * self.VZ_factor
+        return pulse
 
 class ReadoutGate(OneQubitGate):
     """Readouts the qubit state."""
@@ -331,13 +348,16 @@ class CPHASE_with_1qb_phases(CompositeGate):
 
     """
 
-    def __init__(self, phi1, phi2):
+    def __init__(self, phi1, phi2, VZ_factor=0):
         super().__init__(n_qubit=2)
-        self.add_gate(CPHASE())
+        self.phi1 = phi1
+        self.phi2 = phi2
+        self.VZ_factor = VZ_factor
+        self.add_gate(CPHASE(0, VZ_factor=VZ_factor))
         self.add_gate([VirtualZGate(phi1), VirtualZGate(phi2)])
 
-    def new_angles(self, phi1, phi2):
-        """Update the angles of the single qubit rotations.
+    def new_angles(self, phi1, phi2, VZ_factor=0):
+        """Update the angles of the single qubit rotations and the VZ phase factor on its own.
 
         Parameters
         ----------
@@ -345,10 +365,12 @@ class CPHASE_with_1qb_phases(CompositeGate):
             Z rotation angle for qubit 1.
         phi2 : float
             Z rotation angle for qubit 2.
+        VZ_factor : float
+            VZ rotation angle factor.
 
         """
-        self.__init__(phi1, phi2)
-
+        self.__init__(phi1, phi2, VZ_factor=VZ_factor)
+    
     def __str__(self):
         return "CZ"
 
@@ -384,7 +406,7 @@ VZm = VirtualZGate(-np.pi, name='VZm')
 VZ2m = VirtualZGate(-np.pi / 2, name='VZ2m')
 
 # two-qubit gates
-CPh = CPHASE()
+CPh = CPHASE(0)
 
 # Composite gates
 CZEcho = CompositeGate(n_qubit=2)

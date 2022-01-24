@@ -976,6 +976,7 @@ class TwoQubit_RB(Sequence):
         sequence = config['Sequence']
         qubits_to_benchmark = [int(config['Qubits to Benchmark'][0]) - 1,
                                int(config['Qubits to Benchmark'][2]) - 1]
+        self.gate_to_benchmark = config['Gate to Benchmark']
         # Number of Cliffords to generate
         N_cliffords = int(config['Number of Cliffords'])
         randomize = config['Randomize']
@@ -1313,10 +1314,15 @@ class TwoQubit_RB(Sequence):
             gate_12 = np.kron(gate_1, gate_2)   
             
             # change 2QB gate here
-            matrix_cz = np.matrix([[0, 0, 0, -1j], [0, 1, 0, 0], [0, 0, 1, 0],
-                               [-1j, 0, 0, 0]])
-            # matrix_cz = np.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0],
-                               # [0, 0, 0, np.exp(self.controlled_phase * 1j)]])
+            if self.gate_to_benchmark == 'CPhase':
+                matrix_cz = np.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0],
+                                    [0, 0, 0, np.exp(self.controlled_phase * 1j)]])
+            elif self.gate_to_benchmark == 'bSWAP':
+                matrix_cz = np.matrix([[0, 0, 0, -1j], [0, 1, 0, 0], [0, 0, 1, 0],
+                                    [-1j, 0, 0, 0]])
+            elif self.gate_to_benchmark == 'I-I':
+                matrix_cz = np.matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0],
+                                        [0, 0, 0, 1]])
             
             if (gate_seq_1[i] == gates.CZ or gate_seq_2[i] == gates.CZ):
                 gate_12 = np.matmul(matrix_cz, gate_12)
@@ -1420,7 +1426,9 @@ class TwoQubit_RB(Sequence):
 
             # Calculate the matrix of the total clifford sequence
             matrix_total = np.matmul(matrix_recovery,matrix_cliffords)
+            # log.info('matrix_total is ' + str(abs(matrix_total[0,0])))
             if (CheckIdentity(matrix_total)):
+                log.info('found the matrix! index is ' + str(i))
                 if (find_cheapest == True):
                     # Less 2QB Gates, Less 1QB Gates, and More I Gates = the cheapest gates.
                     # The priority: less 2QB gates > less 1QB gates > more I gates
@@ -1440,31 +1448,31 @@ class TwoQubit_RB(Sequence):
                             N_I_gate += 1
 
                     if (N_2QB_gate <= min_N_2QB_gate): # if it has less 2QB gates, always update it
-                        min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                        min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
 
                         if (N_1QB_gate <= min_N_1QB_gate): # *only if it has less 2QB gates*, check whether it has less 1QB gates
-                            min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                            min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
 
                             if (N_I_gate >= max_N_I_gate): # *only if it has less 2QB gates & only if it has less 1QB gates*, check whether it has more I gates
-                                min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                                min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
 
                     # check whether it is the cheapest
                     # if it has less 2QB gates, always update it.
                     if (N_2QB_gate < min_N_2QB_gate):
-                        min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                        min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
                         log.info('the cheapest sequence update! [N_2QB_gate, N_1QB_gate, N_I_gate, seq. index] ' + str([min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index]))
                     else:
                         # if it has equal # of 2QB gates and less 1QB gates, update it.
                         if (N_2QB_gate == min_N_2QB_gate and
                             N_1QB_gate < min_N_1QB_gate):
-                            min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                            min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
                             log.info('the cheapest sequence update! [N_2QB_gate, N_1QB_gate, N_I_gate, seq. index] ' + str([min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index]))
                         else:
                             # if it has equal # of 2QB & 1QB gates, and more 1QB gates, update it.
                             if (N_2QB_gate == min_N_2QB_gate and
                                 N_1QB_gate == min_N_1QB_gate and
                                 N_I_gate >= max_N_I_gate):
-                                min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, j)
+                                min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index = (N_2QB_gate, N_1QB_gate, N_I_gate, i)
                                 log.info('the cheapest sequence update! [N_2QB_gate, N_1QB_gate, N_I_gate, seq. index] ' + str([min_N_2QB_gate, min_N_1QB_gate, max_N_I_gate, cheapest_index]))
 
                 else:

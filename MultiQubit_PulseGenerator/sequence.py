@@ -914,7 +914,7 @@ class SequenceToWaveforms:
             for step in self.sequence_list:
                 for gate in step.gates:
                     gate_obj = None
-                    if qubit == gate.qubit:  # TODO Allow for 2 qb
+                    if qubit == gate.qubit or isinstance(gate.qubit, list):  # TODO Allow for 2 qb
                         gate_obj = gate.gate
                     if isinstance(gate_obj, gates.VirtualZGate):
                         phase -= gate_obj.theta
@@ -925,12 +925,14 @@ class SequenceToWaveforms:
                         gate.gate.phi += phase
                         # Need to recompute the pulse
                         gate.pulse = self._get_pulse_for_gate(gate)
-                    if (isinstance(gate.gate, gates.TwoQubitGate) # TODO need to double check
+                    if (isinstance(gate_obj, gates.TwoQubitGate) # TODO need to double check
                             and phase != 0):
-                        # gate.gate = copy.copy(gate_obj)
-                        gate.pulse.phase += phase / 2
+                        gate.gate = copy.copy(gate_obj)                        
+                        # gate.pulse.phase += phase
+                        gate.gate.phi += phase
+                        # log.info('gate.pulse.phase is ' + str(gate.pulse.phase))
                         # Need to recompute the pulse
-                        # gate.pulse = self._get_pulse_for_gate(gate)
+                        gate.pulse = self._get_pulse_for_gate(gate)
 
     def _add_microwave_gate(self):
         """Create waveform for gating microwave switch."""
@@ -1625,7 +1627,7 @@ class SequenceToWaveforms:
                 
 
             gates.CZ.new_angles(
-                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'))
+                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'))
             self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),
                                         config.get('Phase shift frequency, 2QB #12')]
             self.CZ_leakage_control = [config.get('Simultaneous leakage #12'),
@@ -1761,7 +1763,7 @@ class SequenceToWaveforms:
             else:
                 pulse.amplitude = config.get('Heralding amplitude factor')*config.get('Readout amplitude #%d' % (n + 1))
 
-            pulse.frequency = config.get('Readout frequency #%d' % m)
+            pulse.frequency = pulse.frequency = config.get('Heralding frequency')
             self.pulses_heralding[n] = pulse
         
         #Heralding pulse 2
