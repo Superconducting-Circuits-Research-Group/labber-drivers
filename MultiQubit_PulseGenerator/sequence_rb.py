@@ -1027,7 +1027,7 @@ class TwoQubit_RB(Sequence):
             for j in range(N_cliffords):
                 log.info('Seed number: %d'%(randomize))
                 if UseOnlyClifford1:
-                    rndnum = rnd.randint(0, 576)
+                    rndnum = rnd.randint(0, 575)
                 else:
                     rndnum = rnd.randint(0, 11519)
                 #rndnum = rnd.randint(0, 576) #Only applying single qubit gates
