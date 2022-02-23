@@ -348,16 +348,18 @@ class CPHASE_with_1qb_phases(CompositeGate):
 
     """
 
-    def __init__(self, phi1, phi2, VZ_factor=0):
+    def __init__(self, phi1, phi2, VZ_factor=0, add_echo_pulse=False):
         super().__init__(n_qubit=2)
         self.phi1 = phi1
         self.phi2 = phi2
         self.VZ_factor = VZ_factor
         self.add_gate(CPHASE(0, VZ_factor=VZ_factor))
+        if add_echo_pulse:
+            self.add_gate(CPHASE(np.pi, VZ_factor=VZ_factor))
         self.add_gate([VirtualZGate(phi1), VirtualZGate(phi2)])
 
-    def new_angles(self, phi1, phi2, VZ_factor=0):
-        """Update the angles of the single qubit rotations and the VZ phase factor on its own.
+    def new_angles(self, phi1, phi2, VZ_factor=0, add_echo_pulse=False):
+        """Update the angles of the single qubit rotations and the VZ phase factor on its own. Update whether to use echo pulse.
 
         Parameters
         ----------
@@ -369,7 +371,7 @@ class CPHASE_with_1qb_phases(CompositeGate):
             VZ rotation angle factor.
 
         """
-        self.__init__(phi1, phi2, VZ_factor=VZ_factor)
+        self.__init__(phi1, phi2, VZ_factor=VZ_factor, add_echo_pulse=add_echo_pulse)
     
     def __str__(self):
         return "CZ"
