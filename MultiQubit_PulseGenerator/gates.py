@@ -45,15 +45,23 @@ class SingleQubitXYRotation(OneQubitGate):
 
     """
 
-    def __init__(self, phi, theta, name=None):
+    def __init__(self, phi, theta, name=None, plateau=None):
         self.phi = phi
         self.theta = theta
         self.name = name
+        self.plateau = plateau
+        # log.info(str(self.plateau))
+        # log.info(str(self.name))
 
     def get_adjusted_pulse(self, pulse, pulse_scaling='Amplitude', scaling_factor_pi2=0.5):
+        log.info('before the error:' + str(self.name))
+        
         pulse = copy(pulse)
         pulse.phase = self.phi
         self.pulse_scaling = pulse_scaling
+        if self.plateau is not None:
+            pulse.plateau = self.plateau
+            # log.info(str(pulse.plateau))
         if self.pulse_scaling == 'Amplitude':
         # pi pulse correspond to the full amplitude
             pulse.amplitude *= self.theta / np.pi
@@ -195,14 +203,15 @@ class CPHASE(TwoQubitGate):
         Roation axis factor.
         
     """
-    def __init__(self, phi, VZ_factor=0.5):
+    def __init__(self, phi, VZ_factor=0.5, phi_offset=0):
         self.phi = phi
         self.VZ_factor = VZ_factor
+        self.phi_offset = phi_offset
         
     def get_adjusted_pulse(self, pulse):
         # log.info('self.phi is ' + str(self.phi))
         pulse = copy(pulse)
-        pulse.phase = self.phi * self.VZ_factor
+        pulse.phase = self.phi * self.VZ_factor + self.phi_offset
         return pulse
 
 class ReadoutGate(OneQubitGate):
@@ -348,17 +357,18 @@ class CPHASE_with_1qb_phases(CompositeGate):
 
     """
 
-    def __init__(self, phi1, phi2, VZ_factor=0, add_echo_pulse=False):
+    def __init__(self, phi1, phi2, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
         super().__init__(n_qubit=2)
         self.phi1 = phi1
         self.phi2 = phi2
         self.VZ_factor = VZ_factor
-        self.add_gate(CPHASE(0, VZ_factor=VZ_factor))
-        if add_echo_pulse:
-            self.add_gate(CPHASE(np.pi, VZ_factor=VZ_factor))
+        self.CPhase_pulse_number = max(int(CPhase_pulse_number), 1)
+        self.phi_offset_step = phi_offset_step
+        for i in range(self.CPhase_pulse_number):
+            self.add_gate(CPHASE(0, VZ_factor=VZ_factor, phi_offset=phi_offset_step * i))
         self.add_gate([VirtualZGate(phi1), VirtualZGate(phi2)])
 
-    def new_angles(self, phi1, phi2, VZ_factor=0, add_echo_pulse=False):
+    def new_angles(self, phi1, phi2, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
         """Update the angles of the single qubit rotations and the VZ phase factor on its own. Update whether to use echo pulse.
 
         Parameters
@@ -371,8 +381,7 @@ class CPHASE_with_1qb_phases(CompositeGate):
             VZ rotation angle factor.
 
         """
-        self.__init__(phi1, phi2, VZ_factor=VZ_factor, add_echo_pulse=add_echo_pulse)
-    
+        self.__init__(phi1, phi2, VZ_factor=VZ_factor, CPhase_pulse_number=CPhase_pulse_number, phi_offset_step=phi_offset_step)
     def __str__(self):
         return "CZ"
 

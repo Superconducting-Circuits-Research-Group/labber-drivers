@@ -784,6 +784,8 @@ class SequenceToWaveforms:
             pulse = None
         # Get the corresponding pulse for other gates
         elif isinstance(gate, gates.SingleQubitXYRotation):
+            # log.info('before the error:' + str(gate))
+            # log.info(str(gate==gates.X2m))
             pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit], \
                 pulse_scaling = self.single_qubit_pulse_scaling, \
                 scaling_factor_pi2 = self.single_qubit_pulse_scaling_factor[qubit])
@@ -1394,6 +1396,13 @@ class SequenceToWaveforms:
                             pulse2.amplitude = amplitude2
                             pulse2.phase += phase2 + phase_shift_frequency2 * t0 * 2 * np.pi
                             pulse2.frequency = frequency2
+                            # pulse2.shape = self._get_pulse_for_gate(gate).shape
+                            pulse2.use_drag = self._get_pulse_for_gate(gate).use_drag
+                            pulse2.drag_coefficient = self._get_pulse_for_gate(gate).drag_coefficient
+                            pulse2.drag_detuning = self._get_pulse_for_gate(gate).drag_detuning
+                            pulse2.truncation_range = self._get_pulse_for_gate(gate).truncation_range
+                            pulse2.start_at_zero = self._get_pulse_for_gate(gate).start_at_zero
+
                             if self.CZ_leakage_control[0]:
                                 self._wave_xy[qubit2][indices] += pulse2.calculate_waveform(t0, t)
                             else:
@@ -1627,7 +1636,8 @@ class SequenceToWaveforms:
                 
 
             gates.CZ.new_angles(
-                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'))
+                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'),
+                CPhase_pulse_number=config.get('CPhase pulse number #12'), phi_offset_step=config.get('Phi offset step #12'))
             self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),
                                         config.get('Phase shift frequency, 2QB #12')]
             self.CZ_leakage_control = [config.get('Simultaneous leakage #12'),
