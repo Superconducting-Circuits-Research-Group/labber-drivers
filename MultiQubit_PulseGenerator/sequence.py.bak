@@ -1383,10 +1383,6 @@ class SequenceToWaveforms:
                             new_t = new_indices / self.sample_rate
                             new_t0 = t0 - leakage_duration / 2
                             waveform[new_indices] += gate.pulse.calculate_waveform(new_t0, new_t)
-                            gate.pulse.amplitude = self._get_pulse_for_gate(gate).amplitude2
-                            gate.pulse.frequency = self._get_pulse_for_gate(gate).frequency2
-                            gate.pulse.drag_coefficient = self._get_pulse_for_gate(gate).drag_coefficient2
-                            waveform[indices] += gate.pulse.calculate_waveform(new_t0, new_t)
                     else:
                         waveform[indices] += gate.pulse.calculate_waveform(t0, t)
                     if self.compensate_classical_xtalk and isinstance(gate_obj, gates.SingleQubitXYRotation):

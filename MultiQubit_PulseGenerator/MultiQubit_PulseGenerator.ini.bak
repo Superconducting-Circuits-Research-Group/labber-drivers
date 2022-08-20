@@ -3207,7 +3207,7 @@ group: 2-QB pulse #12
 section: 2-QB gates
 
 [Amplitude #2, 2QB #12]
-label: Amplitude #2
+label: Amplitude
 datatype: DOUBLE
 unit: V
 def_value: 1.0
@@ -3221,7 +3221,7 @@ state_value_4: Cosine
 show_in_measurement_dlg: True
 
 [Frequency #2, 2QB #12]
-label: Frequency #2
+label: Frequency
 datatype: DOUBLE
 unit: Hz
 def_value: 0.0
@@ -3235,7 +3235,7 @@ state_value_4: Cosine
 show_in_measurement_dlg: True
 
 [DRAG scaling #2, 2QB #12]
-label: DRAG scaling #2
+label: DRAG scaling
 datatype: DOUBLE
 unit: s
 def_value: .25E-9
