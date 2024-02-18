@@ -111,6 +111,7 @@ class PulseTrain(Sequence):
         # get parameters
         n_pulse = int(config['# of pulses'])
         alternate = config['Alternate pulse direction']
+        reverse = config['Reverse pulse direction']
         manipulated_qubits = config['Manipulated Qubits']
         
         d = dict(
@@ -144,6 +145,8 @@ class PulseTrain(Sequence):
                 self.add_gate(qubit,[gates.I for n in range(len(qubit))])
             else:
                 if alternate and (n % 2) == 1:
+                    pulse_type = pulse_type.replace('p', 'm')
+                elif reverse:
                     pulse_type = pulse_type.replace('p', 'm')
                 gate = getattr(gates, pulse_type)
                 gate_on_selected_qubits = [gate for n in range(len(qubit))]

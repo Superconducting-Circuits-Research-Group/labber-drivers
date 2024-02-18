@@ -220,17 +220,12 @@ class Sequence:
         """
         self.sequence_list = []
 		
-        if self.perform_initialization:
-            self.add_gate([0],[gates.Zini], align='right')			
-            if self.initialization_delay > 0:
-                delay_initialization = gates.IdentityGate(width=self.initialization_delay)
-                self.add_gate_to_all(delay_initialization, dt=0, align='right')
-        
         if self.perform_heralding:
             self.add_gate_to_all(gates.HeraldingGate(), dt=0, align='right')			
-            if self.heralding_delay > 0:
-                delay_heralding = gates.IdentityGate(width=self.heralding_delay)
-                self.add_gate_to_all(delay_heralding, dt=0, align='right')        
+            
+        if self.heralding_delay > 0:
+            delay_heralding = gates.IdentityGate(width=self.heralding_delay)
+            self.add_gate_to_all(delay_heralding, dt=0, align='right')
 			
         if self.perform_process_tomography:
             self._process_tomography.add_pulses(self)
@@ -475,13 +470,6 @@ class Sequence:
         self.heralding_delay = config.get('Delay after heralding')
         self.heralding_delay_2 = config.get('Delay after heralding #2')
 
-        #Initialization
-        self.initialization_delay = config.get('Delay after initialization')
-
-        # perform Initialization
-        self.perform_initialization = \
-            config.get('Activate Initialization', False)
-
         # perform heralding
         self.perform_heralding = \
             config.get('Activate Heralding', False)
@@ -721,7 +709,7 @@ class SequenceToWaveforms:
         # create and return dictionary with waveforms
         waveforms = dict()
         waveforms['xy'] = self._wave_xy
-        self._wave_z[0] += self.ovr_offset        
+        self._wave_z[0] += self.ovr_offset
         waveforms['z'] = self._wave_z
         waveforms['gate'] = self._wave_gate
         waveforms['gate_z'] = self._wave_gate_z
@@ -801,12 +789,11 @@ class SequenceToWaveforms:
             # log.info(str(gate==gates.X2m))
             pulse = gate.get_adjusted_pulse(self.pulses_1qb_xy[qubit], \
                 pulse_scaling = self.single_qubit_pulse_scaling, \
-                scaling_factor_pi2 = self.single_qubit_pulse_scaling_factor[qubit], \
-                detuning_pi2 = self.single_qubit_pulse_scaling_factor[qubit+2])
+                scaling_factor_pi2 = self.single_qubit_pulse_scaling_factor[qubit])
         elif isinstance(gate, gates.SingleQubitZRotation):
             pulse = gate.get_adjusted_pulse(self.pulses_1qb_z[qubit], \
-                pulse_scaling = self.single_qubit_pulse_scaling)#, \
-                #scaling_factor_pi2 = 0.5)
+                pulse_scaling = self.single_qubit_pulse_scaling, \
+                scaling_factor_pi2 = 0.5)
         elif isinstance(gate, gates.IdentityGate):
             if gate.width==None:
                 pulse = None
@@ -941,12 +928,6 @@ class SequenceToWaveforms:
                         gate.gate.phi += phase
                         # Need to recompute the pulse
                         gate.pulse = self._get_pulse_for_gate(gate)
-                    #if (isinstance(gate_obj, gates.SingleQubitZRotation)
-                    #        and phase != 0):
-                    #    gate.gate = copy.copy(gate_obj)
-                    #    gate.gate.phi += phase
-                        # Need to recompute the pulse
-                    #    gate.pulse = self._get_pulse_for_gate(gate)
                     if (isinstance(gate_obj, gates.TwoQubitGate) # TODO need to double check
                             and phase != 0):
                         gate.gate = copy.copy(gate_obj)                        
@@ -1228,7 +1209,7 @@ class SequenceToWaveforms:
         for n in range(self.n_qubit):
             self._wave_xy[n] = np.zeros(self.n_pts, dtype=np.complex)
             # log.info('wave z {} initiated to 0'.format(n))
-            self._wave_z[n] = np.zeros(self.n_pts, dtype=np.complex)
+            self._wave_z[n] = np.zeros(self.n_pts, dtype=complex)
             self._wave_gate[n] = np.zeros(self.n_pts, dtype=float)
             self._wave_gate_z[n] = np.zeros(self.n_pts, dtype=float)
 
@@ -1291,24 +1272,13 @@ class SequenceToWaveforms:
                         waveform2 = self._wave_xy[qubit2]
                         gate2 = copy.copy(gate)
                         gate2.qubit = qubit2
-                        #gate2.pulse = self._get_pulse_for_gate(gate2)
-                        
-                        gateII = gate2.gate
-                        gate2.pulse = gateII.get_adjusted_pulse(self.pulses_1qb_xy[qubit2], \
-                        pulse_scaling = self.single_qubit_pulse_scaling, \
-                        scaling_factor_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2], \
-                        detuning_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2+2])
-                        
-                        detuning_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2+2]
+                        gate2.pulse = self._get_pulse_for_gate(gate2)
                         pulse2 = gate2.pulse
                         pulse2.width = self._get_pulse_for_gate(gate).width
                         pulse2.plateau = self._get_pulse_for_gate(gate).plateau
                         pulse2.amplitude *= theta2
                         pulse2.phase += phase2
-                        if abs(gate_obj.theta)==np.pi/2:
-                            pulse2.frequency = frequency2 + detuning_pi2
-                        else:
-                            pulse2.frequency = frequency2
+                        pulse2.frequency = frequency2
                 elif isinstance(gate_obj, gates.ReadoutGate):
                     waveform = self.readout_iq
                     delay = 0
@@ -1487,9 +1457,6 @@ class SequenceToWaveforms:
             for n in range(self.n_qubit):
                 m = n + 1
                 self.single_qubit_pulse_scaling_factor.append(config.get('pi/2 scaling #%d' % m))
-            for n in range(self.n_qubit):
-                m = n + 1
-                self.single_qubit_pulse_scaling_factor.append(config.get('pi/2 detuning #%d' % m))
         else:
             self.single_qubit_pulse_scaling_factor = [0.5 for _ in range(d[config.get('Number of qubits')])]
         self.dt = config.get('Pulse spacing')
@@ -1590,9 +1557,9 @@ class SequenceToWaveforms:
             m = n + 1
             # global parameters
             pulse = (getattr(pulses,
-                             config.get('Pulse type, Z'))(complex=True))
+                             config.get('Pulse type, Z'))(complex=False))
             pulse.truncation_range = config.get('Truncation range, Z')
-            pulse.start_at_zero = config.get('Start at zero, Z')            
+            pulse.start_at_zero = config.get('Start at zero, Z')
             # pulse shape
             if config.get('Uniform pulse shape, Z'):
                 pulse.width = config.get('Width, Z')
@@ -1605,8 +1572,6 @@ class SequenceToWaveforms:
                 pulse.amplitude = config.get('Amplitude, Z')
             else:
                 pulse.amplitude = config.get('Amplitude #%d, Z' % m)
-
-            pulse.frequency = config.get('Frequency #%d, Z' % m)
 
             self.pulses_1qb_z[n] = pulse
 

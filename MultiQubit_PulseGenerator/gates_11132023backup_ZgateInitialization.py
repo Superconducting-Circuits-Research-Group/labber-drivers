@@ -53,7 +53,7 @@ class SingleQubitXYRotation(OneQubitGate):
         # log.info(str(self.plateau))
         # log.info(str(self.name))
 
-    def get_adjusted_pulse(self, pulse, pulse_scaling='Amplitude', scaling_factor_pi2=0.5, detuning_pi2=0.0):
+    def get_adjusted_pulse(self, pulse, pulse_scaling='Amplitude', scaling_factor_pi2=0.5):
         log.info('before the error:' + str(self.name))
         
         pulse = copy(pulse)
@@ -65,16 +65,14 @@ class SingleQubitXYRotation(OneQubitGate):
         if self.pulse_scaling == 'Amplitude':
         # pi pulse correspond to the full amplitude
             pulse.amplitude *= self.theta / np.pi
-            if abs(self.theta)==np.pi / 2:
+            if self.theta==np.pi / 2:
                 pulse.amplitude *= 2*scaling_factor_pi2
-                pulse.frequency += detuning_pi2
         elif self.pulse_scaling == 'Duration':
             pulse.plateau *= self.theta / np.pi
             pulse.width *= self.theta / np.pi
-            if abs(self.theta)==np.pi / 2:
+            if self.theta==np.pi / 2:
                 pulse.plateau *= 2 * scaling_factor_pi2
                 pulse.width *= 2 * scaling_factor_pi2
-                pulse.frequency += detuning_pi2
         return pulse
         
     def new_scaling(self, new_pulse_scaling):
@@ -110,8 +108,7 @@ class SingleQubitZRotation(OneQubitGate):
 
     """
 
-    def __init__(self, phi, theta, name=None):
-        self.phi = phi
+    def __init__(self, theta, name=None):
         self.theta = theta
         self.name = name
 
@@ -222,7 +219,7 @@ class ReadoutGate(OneQubitGate):
 	
 class HeraldingGate(OneQubitGate):
     """Heraldings the qubit state."""
-    
+
 class HeraldingGate2(OneQubitGate):
     """Heraldings the qubit state."""                                  
 
@@ -408,11 +405,10 @@ Y2m = SingleQubitXYRotation(phi=np.pi / 2, theta=-np.pi / 2, name='Y2m')
 Y2p = SingleQubitXYRotation(phi=np.pi / 2, theta=np.pi / 2, name='Y2p')
 
 # Z gates
-Zp = SingleQubitZRotation(phi=0, theta=np.pi, name='Zp')
-Z2p = SingleQubitZRotation(phi=0, theta=np.pi / 2, name='Z2p')
-Zm = SingleQubitZRotation(phi=0, theta=-np.pi, name='Zm')
-Z2m = SingleQubitZRotation(phi=0, theta=-np.pi / 2, name='Z2m')
-Zini = SingleQubitZRotation(phi=np.pi/4, theta=np.pi, name='Zini')
+Zp = SingleQubitZRotation(np.pi, name='Zp')
+Z2p = SingleQubitZRotation(np.pi / 2, name='Z2p')
+Zm = SingleQubitZRotation(-np.pi, name='Zm')
+Z2m = SingleQubitZRotation(-np.pi / 2, name='Z2m')
 
 # Virtual Z gates
 VZp = VirtualZGate(np.pi, name='VZp')
