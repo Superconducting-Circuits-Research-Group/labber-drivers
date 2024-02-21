@@ -948,13 +948,14 @@ class SequenceToWaveforms:
                         # Need to recompute the pulse
                     #    gate.pulse = self._get_pulse_for_gate(gate)
                     if (isinstance(gate_obj, gates.TwoQubitGate) # TODO need to double check
-                            and phase != 0):
-                        gate.gate = copy.copy(gate_obj)                        
-                        # gate.pulse.phase += phase
-                        gate.gate.phi += phase
-                        # log.info('gate.pulse.phase is ' + str(gate.pulse.phase))
-                        # Need to recompute the pulse
-                        gate.pulse = self._get_pulse_for_gate(gate)
+                            and phase != 0):                        
+                        if qubit == self.TargetQubit_VZ_2QB:    
+                            gate.gate = copy.copy(gate_obj)                        
+                            # gate.pulse.phase += phase
+                            gate.gate.phi += phase
+                            # log.info('gate.pulse.phase is ' + str(gate.pulse.phase))
+                            # Need to recompute the pulse
+                            gate.pulse = self._get_pulse_for_gate(gate)
 
     def _add_microwave_gate(self):
         """Create waveform for gating microwave switch."""
@@ -1303,6 +1304,8 @@ class SequenceToWaveforms:
                         pulse2 = gate2.pulse
                         pulse2.width = self._get_pulse_for_gate(gate).width
                         pulse2.plateau = self._get_pulse_for_gate(gate).plateau
+                        pulse2.drag_coefficient = self._get_pulse_for_gate(gate).drag_coefficient
+                        pulse2.drag_detuning = self._get_pulse_for_gate(gate).drag_detuning
                         pulse2.amplitude *= theta2
                         pulse2.phase += phase2
                         if abs(gate_obj.theta)==np.pi/2:
@@ -1430,11 +1433,16 @@ class SequenceToWaveforms:
                             phase_shift_frequency2 = XY_dict['phase shift frequency']
                             gate2 = copy.copy(GateOnQubit(gates.Xp, qubit2))
                             gate2.pulse = self._get_pulse_for_gate(gate2)
+                            
+                            gate3 = copy.copy(gate)
+                            gate3.pulse = self._get_pulse_for_gate(gate3)
+                            PhaseFromVirtualZ = gate3.pulse.phase
+                            
                             pulse2 = gate2.pulse
                             pulse2.width = self._get_pulse_for_gate(gate).width
                             pulse2.plateau = self.CZ_leakage_control[1]
                             pulse2.amplitude = amplitude2
-                            pulse2.phase += phase2 + phase_shift_frequency2 * t0 * 2 * np.pi
+                            pulse2.phase += PhaseFromVirtualZ + phase2 + phase_shift_frequency2 * t0 * 2 * np.pi
                             pulse2.frequency = frequency2
                             # pulse2.shape = self._get_pulse_for_gate(gate).shape
                             pulse2.use_drag = self._get_pulse_for_gate(gate).use_drag
@@ -1687,6 +1695,7 @@ class SequenceToWaveforms:
             gates.CZ.new_angles(
                 config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'),
                 CPhase_pulse_number=config.get('CPhase pulse number #12'), phi_offset_step=config.get('Phi offset step #12'))
+            self.TargetQubit_VZ_2QB = config.get('Virtual Z target qubit #12')            
             self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),
                                         config.get('Phase shift frequency, 2QB #12')]
             self.CZ_leakage_control = [config.get('Simultaneous leakage #12'),
