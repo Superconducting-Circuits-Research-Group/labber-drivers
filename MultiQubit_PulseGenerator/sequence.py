@@ -1301,6 +1301,8 @@ class SequenceToWaveforms:
                         detuning_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2+2])
                         
                         detuning_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2+2]
+                        amp_ratio_scaling_pi2 = self.single_qubit_pulse_scaling_factor[1-qubit2+4]
+                        
                         pulse2 = gate2.pulse
                         pulse2.width = self._get_pulse_for_gate(gate).width
                         pulse2.plateau = self._get_pulse_for_gate(gate).plateau
@@ -1310,6 +1312,7 @@ class SequenceToWaveforms:
                         pulse2.phase += phase2
                         if abs(gate_obj.theta)==np.pi/2:
                             pulse2.frequency = frequency2 + detuning_pi2
+                            pulse2.amplitude *= amp_ratio_scaling_pi2
                         else:
                             pulse2.frequency = frequency2
                 elif isinstance(gate_obj, gates.ReadoutGate):
@@ -1498,6 +1501,9 @@ class SequenceToWaveforms:
             for n in range(self.n_qubit):
                 m = n + 1
                 self.single_qubit_pulse_scaling_factor.append(config.get('pi/2 detuning #%d' % m))
+            for n in range(self.n_qubit):
+                m = n + 1
+                self.single_qubit_pulse_scaling_factor.append(config.get('pi/2 leakage scaling #%d' % m))
         else:
             self.single_qubit_pulse_scaling_factor = [0.5 for _ in range(d[config.get('Number of qubits')])]
         self.dt = config.get('Pulse spacing')
@@ -1693,7 +1699,7 @@ class SequenceToWaveforms:
                 
 
             gates.CZ.new_angles(
-                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'),
+                config.get('QB1 Phi 2QB #12'), config.get('QB2 Phi 2QB #12'), config.get('QB1 Phi before and after 2QB #12'), config.get('QB2 Phi before and after 2QB #12'), VZ_factor=config.get('Virtual Z phase factor #12'),
                 CPhase_pulse_number=config.get('CPhase pulse number #12'), phi_offset_step=config.get('Phi offset step #12'))
             self.TargetQubit_VZ_2QB = config.get('Virtual Z target qubit #12')            
             self.CZ_phase_correction = [config.get('Phase offset, 2QB #12'),

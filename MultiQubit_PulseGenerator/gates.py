@@ -360,18 +360,22 @@ class CPHASE_with_1qb_phases(CompositeGate):
 
     """
 
-    def __init__(self, phi1, phi2, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
+    def __init__(self, phi1, phi2, phi3, phi4, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
         super().__init__(n_qubit=2)
         self.phi1 = phi1
         self.phi2 = phi2
+        self.phi3 = phi3
+        self.phi4 = phi4
         self.VZ_factor = VZ_factor
         self.CPhase_pulse_number = max(int(CPhase_pulse_number), 1)
         self.phi_offset_step = phi_offset_step
+        self.add_gate([VirtualZGate(phi3), VirtualZGate(phi4)])
         for i in range(self.CPhase_pulse_number):
             self.add_gate(CPHASE(0, VZ_factor=VZ_factor, phi_offset=phi_offset_step * i))
+        self.add_gate([VirtualZGate(phi3), VirtualZGate(phi4)])
         self.add_gate([VirtualZGate(phi1), VirtualZGate(phi2)])
 
-    def new_angles(self, phi1, phi2, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
+    def new_angles(self, phi1, phi2, phi3, phi4, VZ_factor=0, CPhase_pulse_number=1, phi_offset_step=np.pi):
         """Update the angles of the single qubit rotations and the VZ phase factor on its own. Update whether to use echo pulse.
 
         Parameters
@@ -384,7 +388,7 @@ class CPHASE_with_1qb_phases(CompositeGate):
             VZ rotation angle factor.
 
         """
-        self.__init__(phi1, phi2, VZ_factor=VZ_factor, CPhase_pulse_number=CPhase_pulse_number, phi_offset_step=phi_offset_step)
+        self.__init__(phi1, phi2, phi3, phi4, VZ_factor=VZ_factor, CPhase_pulse_number=CPhase_pulse_number, phi_offset_step=phi_offset_step)
     def __str__(self):
         return "CZ"
 
@@ -435,7 +439,8 @@ H = CompositeGate(n_qubit=1, name='H')
 H.add_gate(VZp)
 H.add_gate(Y2p)
 
-CZ = CPHASE_with_1qb_phases(0, 0)  # Start with 0, 0 as the single qubit phase shifts.
+#CZ = CPHASE_with_1qb_phases(0, 0)  # Start with 0, 0 as the single qubit phase shifts.
+CZ = CPHASE_with_1qb_phases(0, 0, 0, 0)  # Start with 0, 0 as the single qubit phase shifts.
 
 CNOT = CompositeGate(n_qubit=2, name='CNOT')
 CNOT.add_gate(H, 1)
